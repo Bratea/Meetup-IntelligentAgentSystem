@@ -12,8 +12,8 @@
 | P3 | 多模型接入：ChatClientRegistry（DeepSeek/智谱/Ollama） | ✅ 完成 | `50f34f1` |
 | P4 | 工具系统：Tool 接口、ToolCallingManager、内置工具 | ✅ 完成 | `50e777a` |
 | P5 | Agent 执行引擎：Think-Execute 循环、状态机、最大步数 | ✅ 完成 | `6ec38eb` |
-| P6 | SSE 流式接口 + 会话/消息管理 | ✅ 完成 | 见下方提交 |
-| P7 | RAG：pgvector 向量存储、bge-m3、HNSW、TopK 检索 | ⬜ 待开始 | — |
+| P6 | SSE 流式接口 + 会话/消息管理 | ✅ 完成 | `244f0c3` |
+| P7 | RAG：pgvector 向量存储、bge-m3、HNSW、TopK 检索 | ✅ 完成 | 见下方提交 |
 | P8 | 前端：Vite + TS 脚手架、聊天页（SSE 实时渲染） | ⬜ 待开始 | — |
 | P9 | 前端：智能体/知识库/模型/工具管理页 | ⬜ 待开始 | — |
 | P10 | 联调、测试、README、部署文档收尾 | ⬜ 待开始 | — |
@@ -69,9 +69,13 @@
 - `ConversationController`：会话 CRUD
 - `MessageController`：消息查询/删除
 
-### P7 RAG 知识检索 ⬜
+### P7 RAG 知识检索 ✅
 
-- 待实现：文档分段、bge-m3 向量化、pgvector 存储、TopK 检索、知识库 API
+- `EmbeddingService`：Ollama bge-m3 向量化，向量与 PG 数组互转
+- `DocumentSplitter`：文档分段（带重叠），优先按段落切分
+- `KnowledgeSearchService`：pgvector 余弦检索 + Top-K，结果组装为上下文
+- `KnowledgeService`：文档入库、分段、批量向量化、状态管理
+- 接口：`GET/POST/DELETE /api/knowledge/documents`、`POST /api/knowledge/search`
 
 ### P8 前端脚手架 + 聊天页 ⬜
 
