@@ -7,7 +7,10 @@ import { request } from './request'
 export interface KnowledgeDocument {
   id: number
   name: string
-  content: string
+  /** 列表接口仅返回 200 字预览，详情接口才返回全文 */
+  contentPreview?: string
+  /** 全文（仅详情接口返回） */
+  content?: string
   status: 'PROCESSING' | 'READY' | 'FAILED' | string
   segmentCount: number
   createdAt?: string

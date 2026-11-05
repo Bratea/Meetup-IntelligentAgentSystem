@@ -2,7 +2,6 @@ package com.xunwu.agent.agent;
 
 import lombok.Data;
 
-import java.util.List;
 
 /**
  * Agent 执行请求

@@ -35,11 +35,4 @@ public enum AgentState {
     AgentState(String label) {
         this.label = label;
     }
-
-    /**
-     * 是否终止状态
-     */
-    public boolean isTerminal() {
-        return this == COMPLETED || this == MAX_STEPS_REACHED || this == FAILED;
-    }
 }

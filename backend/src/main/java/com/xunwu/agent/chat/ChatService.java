@@ -4,8 +4,8 @@ import com.xunwu.agent.agent.AgentContext;
 import com.xunwu.agent.agent.AgentEvent;
 import com.xunwu.agent.agent.AgentExecutor;
 import com.xunwu.agent.agent.AgentRequest;
-import com.xunwu.agent.agent.AgentState;
 import com.xunwu.agent.common.BizException;
+import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.Agent;
 import com.xunwu.agent.entity.Conversation;
 import com.xunwu.agent.mapper.AgentMapper;
@@ -13,6 +13,7 @@ import com.xunwu.agent.mapper.ConversationMapper;
 import com.xunwu.agent.mapper.MessageMapper;
 import com.xunwu.agent.model.ChatClientRegistry;
 import com.xunwu.agent.tool.ToolRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -34,31 +35,58 @@ import java.util.List;
 @Service
 public class ChatService {
 
+    /** 单次请求携带的最大历史消息条数（超出则丢弃最早的，避免上下文溢出） */
+    private static final int MAX_HISTORY_MESSAGES = 20;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final AgentMapper agentMapper;
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final ChatClientRegistry chatClientRegistry;
     private final ToolRegistry toolRegistry;
     private final AgentExecutor agentExecutor;
+    private final XunwuProperties properties;
 
     public ChatService(AgentMapper agentMapper,
                        ConversationMapper conversationMapper,
                        MessageMapper messageMapper,
                        ChatClientRegistry chatClientRegistry,
                        ToolRegistry toolRegistry,
-                       AgentExecutor agentExecutor) {
+                       AgentExecutor agentExecutor,
+                       XunwuProperties properties) {
         this.agentMapper = agentMapper;
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.chatClientRegistry = chatClientRegistry;
         this.toolRegistry = toolRegistry;
         this.agentExecutor = agentExecutor;
+        this.properties = properties;
     }
 
     /**
      * 流式对话
      */
     public Flux<AgentEvent> stream(AgentRequest request) {
+        try {
+            return doStream(request);
+        } catch (BizException e) {
+            // SSE 端点的 produces 固定为 text/event-stream，
+            // 此时再抛异常会因"无 JSON 转换器"导致响应写不出去。
+            // 因此初始化阶段的错误也一律作为 SSE 事件下发。
+            log.warn("对话初始化被拒绝: {}", e.getMessage());
+            return Flux.just(AgentEvent.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("对话初始化失败", e);
+            return Flux.just(AgentEvent.error("对话初始化失败，请稍后重试"));
+        }
+    }
+
+    private Flux<AgentEvent> doStream(AgentRequest request) {
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            throw BizException.badRequest("消息内容不能为空");
+        }
+
         // 1. 加载智能体
         Agent agent = loadAgent(request.getAgentId());
 
@@ -84,12 +112,16 @@ public class ChatService {
         return agentExecutor.executeStream(context)
                 .doOnNext(event -> {
                     if ("done".equals(event.getType())) {
+                        Object data = event.getData();
+                        String content = data == null ? "" : String.valueOf(data);
                         saveMessage(finalConversationId, "assistant",
-                                (String) event.getData(), context.getModelId(), null);
+                                content, context.getModelId(), null);
                     }
                 })
                 .doOnComplete(() -> log.info("对话完成: conversationId={}", finalConversationId))
-                .doOnError(e -> log.error("对话异常: conversationId={}", finalConversationId, e));
+                .doOnError(e -> log.error("对话异常: conversationId={}", finalConversationId, e))
+                // 理论上 AgentExecutor 已把异常转成 error 事件，这里是最后一道兜底
+                .onErrorResume(e -> Flux.just(AgentEvent.error(toUserMessage(e))));
     }
 
     /**
@@ -97,27 +129,43 @@ public class ChatService {
      */
     private AgentContext buildContext(AgentRequest request, Agent agent) {
         String modelId = request.getModelId() != null ? request.getModelId() : agent.getModelId();
-        ChatClient chatClient = chatClientRegistry.getChatClient(modelId);
+        ChatClient chatClient;
+        try {
+            chatClient = chatClientRegistry.getChatClient(modelId);
+        } catch (IllegalArgumentException e) {
+            throw BizException.badRequest(e.getMessage());
+        }
 
-        List<org.springframework.ai.chat.messages.Message> history = loadHistory(request.getConversationId());
-
-        // 工具
-        List<String> toolNames = parseToolIds(agent.getToolIds());
-        List<ToolCallback> tools = toolRegistry.getTools(toolNames);
-        // 固定工具始终可用
+        List<String> configuredTools = parseToolIds(agent.getToolIds());
+        // 可选工具 + 固定工具，统一用可变列表承载
+        List<ToolCallback> tools = new ArrayList<>(toolRegistry.getTools(configuredTools));
         tools.addAll(toolRegistry.getFixedTools());
 
-        int maxSteps = request.getMaxSteps() != null ? request.getMaxSteps() : agent.getMaxSteps();
+        // toolNames 必须是"真正注册且启用"的名字。
+        // Spring AI 的 DefaultToolCallingManager.resolveToolDefinitions 会对 toolNames 中
+        // 无法解析的名字抛 IllegalStateException，未过滤会导致整个对话 500。
+        List<String> toolNames = new ArrayList<>(toolRegistry.resolveToolNames(configuredTools));
+        toolNames.addAll(toolRegistry.getFixedToolNames());
+
+        Integer maxSteps = request.getMaxSteps() != null
+                ? request.getMaxSteps()
+                : (agent.getMaxSteps() != null && agent.getMaxSteps() > 0
+                    ? agent.getMaxSteps()
+                    : properties.getAgent().getMaxSteps());
 
         AgentContext context = new AgentContext();
         context.setChatClient(chatClient);
         context.setSystemPrompt(agent.getSystemPrompt());
-        context.setHistory(history);
+        context.setHistory(loadHistory(request.getConversationId()));
         context.setUserMessage(request.getMessage());
         context.setTools(tools);
         context.setToolNames(toolNames);
         context.setMaxSteps(maxSteps);
         context.setModelId(modelId);
+        // RAG：把查询交给执行引擎，在异步线程里检索，不阻塞 HTTP 线程
+        if (request.isEnableRag()) {
+            context.setKnowledgeQuery(request.getMessage());
+        }
         return context;
     }
 
@@ -132,21 +180,31 @@ public class ChatService {
         return agent;
     }
 
+    /**
+     * 加载会话历史，过滤掉 tool 消息（避免历史工具调用上下文污染），并限制条数。
+     */
     private List<org.springframework.ai.chat.messages.Message> loadHistory(Long conversationId) {
-        if (conversationId == null) {
-            return new ArrayList<>();
-        }
         List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
-        messageMapper.selectByConversationId(conversationId).forEach(m -> {
+        if (conversationId == null) {
+            return messages;
+        }
+        List<com.xunwu.agent.entity.Message> history =
+                messageMapper.selectByConversationId(conversationId);
+        if (history.isEmpty()) {
+            return messages;
+        }
+        // 只保留最近 MAX_HISTORY_MESSAGES 条
+        int fromIndex = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
+        for (com.xunwu.agent.entity.Message m : history.subList(fromIndex, history.size())) {
             switch (m.getRole()) {
                 case "user" -> messages.add(new UserMessage(m.getContent()));
                 case "assistant" -> messages.add(new AssistantMessage(m.getContent()));
                 case "system" -> messages.add(new SystemMessage(m.getContent()));
                 default -> {
-                    // 忽略 tool 消息（避免历史工具调用上下文污染）
+                    // 忽略 tool 消息
                 }
             }
-        });
+        }
         return messages;
     }
 
@@ -155,27 +213,46 @@ public class ChatService {
         com.xunwu.agent.entity.Message message = new com.xunwu.agent.entity.Message();
         message.setConversationId(conversationId);
         message.setRole(role);
-        message.setContent(content);
+        message.setContent(content == null ? "" : content);
         message.setModel(model);
         message.setToolCalls(toolCalls);
         messageMapper.insert(message);
     }
 
+    /**
+     * 解析智能体配置的工具名列表（JSON 数组）。
+     * 解析失败时返回空列表而不是抛异常 —— 工具配置损坏不应导致整个智能体不可用。
+     */
     private List<String> parseToolIds(String toolIdsJson) {
         List<String> names = new ArrayList<>();
         if (toolIdsJson == null || toolIdsJson.isBlank()) {
             return names;
         }
         try {
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            var node = mapper.readTree(toolIdsJson);
-            if (node.isArray()) {
-                node.forEach(n -> names.add(n.asText()));
+            var node = OBJECT_MAPPER.readTree(toolIdsJson);
+            if (node != null && node.isArray()) {
+                node.forEach(n -> {
+                    String text = n.asText().trim();
+                    if (!text.isEmpty()) {
+                        names.add(text);
+                    }
+                });
+            } else {
+                log.warn("toolIds 不是合法 JSON 数组，已忽略: {}", toolIdsJson);
             }
         } catch (Exception e) {
-            log.warn("解析工具列表失败: {}", toolIdsJson, e);
+            log.warn("解析工具列表失败，已忽略: {}", toolIdsJson, e);
         }
         return names;
+    }
+
+    /** 兜底：把异常翻译成可读提示，不泄露内部细节。 */
+    private String toUserMessage(Throwable e) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        if (cause instanceof IllegalArgumentException) {
+            return cause.getMessage();
+        }
+        return "对话处理失败，请稍后重试";
     }
 
     private String truncate(String text, int max) {

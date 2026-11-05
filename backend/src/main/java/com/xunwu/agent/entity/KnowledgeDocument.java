@@ -23,6 +23,9 @@ public class KnowledgeDocument {
     /** 文档内容 */
     private String content;
 
+    /** 内容预览（仅列表接口返回，非数据库字段） */
+    private String contentPreview;
+
     /** 状态：PROCESSING / READY / FAILED */
     private String status;
 

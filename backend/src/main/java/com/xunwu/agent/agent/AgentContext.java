@@ -21,8 +21,14 @@ public class AgentContext {
     /** 系统提示词 */
     private String systemPrompt;
 
-    /** 知识库上下文 */
+    /** 知识库上下文（由执行引擎在异步线程检索后填充） */
     private String knowledgeContext;
+
+    /** 知识库检索查询；为 null 表示本次对话不启用 RAG */
+    private String knowledgeQuery;
+
+    /** 知识库是否已完成检索（避免非流式与流式重复检索） */
+    private boolean knowledgeLoaded;
 
     /** 历史消息 */
     private List<Message> history;

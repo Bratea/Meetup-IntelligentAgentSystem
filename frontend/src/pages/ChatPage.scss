@@ -232,6 +232,15 @@
     background: $color-primary;
     @include pulse($color-primary);
   }
+
+  // 警示类提示：不显示脉冲点，改用警示色
+  &--warn {
+    color: $color-warning;
+
+    &::before {
+      display: none;
+    }
+  }
 }
 
 .chat__input-row {

@@ -4,7 +4,6 @@
 -- =============================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;   -- 可选：模糊文本检索辅助
 
 -- 校验扩展安装
 DO $$

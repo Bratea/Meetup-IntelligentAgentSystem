@@ -3,8 +3,6 @@ package com.xunwu.agent.agent;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Agent 执行事件（用于 SSE 推送）
@@ -65,8 +63,14 @@ public class AgentEvent {
         return new AgentEvent("done", content, step, AgentState.COMPLETED.name());
     }
 
-    public static AgentEvent error(String message, int step) {
-        return new AgentEvent("error", message, step, AgentState.FAILED.name());
+    /**
+     * 执行失败事件。
+     *
+     * <p>SSE 连接一旦建立，HTTP 状态码就无法再改变，异常必须作为事件推给客户端，
+     * 否则前端只会看到流被硬生生截断。</p>
+     */
+    public static AgentEvent error(String message) {
+        return new AgentEvent("error", message, null, AgentState.FAILED.name());
     }
 
     public static AgentEvent maxSteps(int step) {
@@ -99,23 +103,6 @@ public class AgentEvent {
         public ToolResultPayload(String name, String result) {
             this.name = name;
             this.result = result;
-        }
-    }
-
-    /**
-     * 最终执行结果
-     */
-    @Data
-    public static class ExecutionResult {
-        private final String content;
-        private final String state;
-        private final int steps;
-        private final List<String> toolCalls = new ArrayList<>();
-
-        public ExecutionResult(String content, String state, int steps) {
-            this.content = content;
-            this.state = state;
-            this.steps = steps;
         }
     }
 }

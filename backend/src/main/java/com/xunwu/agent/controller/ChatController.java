@@ -24,10 +24,12 @@ public class ChatController {
     /**
      * SSE 流式对话
      *
-     * <p>客户端使用 EventSource 或 fetch stream 接收：</p>
+     * <p>使用 GET + query 参数，客户端通过 {@code fetch} 读取流（EventSource 不支持自定义
+     * header，且需要传递智能体/会话/模型等参数，故统一用 fetch stream）：</p>
      * <pre>
-     *   const es = new EventSource('/api/chat/stream?agentId=1&message=你好');
-     *   es.onmessage = e => console.log(JSON.parse(e.data));
+     *   const res = await fetch('/api/chat/stream?agentId=1&message=你好');
+     *   const reader = res.body.getReader();
+     *   // 逐块解析 "data: {...}" 事件
      * </pre>
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

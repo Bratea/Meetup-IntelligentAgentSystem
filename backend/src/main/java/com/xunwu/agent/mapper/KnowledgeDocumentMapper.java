@@ -23,8 +23,8 @@ public interface KnowledgeDocumentMapper {
     /** 根据 ID 查询 */
     KnowledgeDocument selectById(@Param("id") Long id);
 
-    /** 查询全部文档 */
-    List<KnowledgeDocument> selectAll();
+    /** 查询全部文档（不含正文） */
+    List<KnowledgeDocument> selectSummaryList();
 
     /** 根据 ID 删除 */
     int deleteById(@Param("id") Long id);

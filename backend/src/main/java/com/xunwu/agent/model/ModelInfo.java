@@ -2,8 +2,6 @@ package com.xunwu.agent.model;
 
 import lombok.Data;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 模型元信息
@@ -53,16 +51,4 @@ public class ModelInfo {
     public ModelInfo() {
     }
 
-    public static List<ModelInfo> defaults() {
-        List<ModelInfo> list = new ArrayList<>();
-        list.add(new ModelInfo("deepseek-chat", "DeepSeek V3", "deepseek", "chat",
-                "DeepSeek 对话模型（OpenAI 兼容协议）", true, false));
-        list.add(new ModelInfo("glm-4-plus", "智谱 GLM-4-Plus", "zhipu", "chat",
-                "智谱 GLM 对话模型", true, false));
-        list.add(new ModelInfo("qwen2.5:7b", "Qwen2.5 7B", "ollama", "chat",
-                "Ollama 本地对话模型", true, true));
-        list.add(new ModelInfo("bge-m3", "BGE-M3 向量模型", "ollama", "embedding",
-                "Ollama 本地向量化模型（1024 维）", true, true));
-        return list;
-    }
 }

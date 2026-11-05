@@ -19,13 +19,16 @@ import java.util.Map;
 @Component
 public class CurrentTimeTool {
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     public String call(String args, ToolContext context) {
         log.info("调用工具 CurrentTimeTool, args={}", args);
         String pattern = "yyyy-MM-dd HH:mm:ss";
         // 支持从参数中解析格式（简单实现）
         if (args != null && args.contains("pattern")) {
             try {
-                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(args);
+                var node = OBJECT_MAPPER.readTree(args);
                 if (node.has("pattern")) {
                     pattern = node.get("pattern").asText();
                 }
@@ -38,7 +41,7 @@ public class CurrentTimeTool {
         result.put("datetime", now);
         result.put("pattern", pattern);
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result);
+            return OBJECT_MAPPER.writeValueAsString(result);
         } catch (Exception e) {
             return "{\"datetime\":\"" + now + "\"}";
         }

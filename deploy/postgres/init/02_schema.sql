@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS agent (
     description   VARCHAR(512),
     system_prompt TEXT,
     avatar        VARCHAR(255),
-    model_id      VARCHAR(64)  NOT NULL DEFAULT 'deepseek-chat',
+    model_id      VARCHAR(64)  NOT NULL DEFAULT 'qwen2.5:7b',
     tool_ids      JSONB        NOT NULL DEFAULT '[]',
     max_steps     INT          NOT NULL DEFAULT 8,
     status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',

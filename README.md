@@ -64,6 +64,8 @@
 │   └── ollama/pull-models.sh       # Ollama 模型拉取脚本
 ├── docker-compose.yml              # 全栈编排
 └── docs/                           # 设计文档
+    ├── ISSUES.md                       # 自检问题清单与修复记录
+    └── PROGRESS.md                     # 阶段进度
 ```
 
 ---
@@ -88,6 +90,9 @@ docker exec -it xunwu-ollama ollama pull qwen2.5:7b
 ```
 
 > 首次构建后端镜像需要下载 Maven 依赖，耗时较长，请耐心等待。
+>
+> 模型未拉取时，模型页与对话页会明确显示"不可用"，
+> 拉取完成后刷新页面即可（后端每 30 秒探测一次 Ollama 已安装模型）。
 
 ### 方式二：本地开发
 
@@ -122,7 +127,8 @@ npm run dev
 
 ### 配置模型 API Key（可选）
 
-通过环境变量传入，未配置时默认使用本地 Ollama 模型：
+通过环境变量传入，未配置时对应模型在模型页标记为"不可用"，
+不影响本地 Ollama 模型使用。可参考 `.env.example`：
 
 ```bash
 export DEEPSEEK_API_KEY=sk-xxxx

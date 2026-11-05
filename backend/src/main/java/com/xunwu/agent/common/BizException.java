@@ -29,4 +29,9 @@ public class BizException extends RuntimeException {
     public static BizException badRequest(String message) {
         return new BizException(400, message);
     }
+
+    /** 依赖服务不可用（Ollama / 远端模型等） */
+    public static BizException serviceUnavailable(String message) {
+        return new BizException(503, message);
+    }
 }

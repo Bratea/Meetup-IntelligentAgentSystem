@@ -26,8 +26,10 @@
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO agent (name, description, system_prompt, avatar, model_id,
                            tool_ids, max_steps, status, created_at, updated_at)
-        VALUES (#{name}, #{description}, #{systemPrompt}, #{avatar}, #{modelId},
-                #{toolIds}, #{maxSteps}, #{status}, now(), now())
+        VALUES (#{name}, #{description}, #{systemPrompt}, #{avatar},
+                COALESCE(#{modelId}, 'qwen2.5:7b'),
+                COALESCE(CAST(#{toolIds} AS jsonb), '[]'::jsonb),
+                COALESCE(#{maxSteps}, 8), #{status}, now(), now())
     </insert>
 
     <update id="update" parameterType="com.xunwu.agent.entity.Agent">
@@ -38,7 +40,7 @@
             <if test="systemPrompt != null">system_prompt = #{systemPrompt},</if>
             <if test="avatar != null">avatar = #{avatar},</if>
             <if test="modelId != null">model_id = #{modelId},</if>
-            <if test="toolIds != null">tool_ids = #{toolIds},</if>
+            <if test="toolIds != null">tool_ids = CAST(#{toolIds} AS jsonb),</if>
             <if test="maxSteps != null">max_steps = #{maxSteps},</if>
             <if test="status != null">status = #{status},</if>
             updated_at = now()

@@ -27,6 +27,8 @@ export interface StreamChatParams {
   conversationId?: number
   message: string
   modelId?: string
+  /** 是否启用知识库检索，默认 true */
+  enableRag?: boolean
 }
 
 /**
@@ -49,59 +51,98 @@ export async function streamChat(
   if (params.modelId) {
     query.set('modelId', params.modelId)
   }
+  if (params.enableRag === false) {
+    query.set('enableRag', 'false')
+  }
   query.set('message', params.message)
 
-  const response = await fetch(`${API_BASE}/chat/stream?${query.toString()}`, {
-    method: 'GET',
-    headers: { Accept: 'text/event-stream' },
-    signal,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}/chat/stream?${query.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'text/event-stream' },
+      signal,
+    })
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      callbacks.onComplete?.()
+      return
+    }
+    const err = new Error(
+      `网络连接失败：${(error as Error).message}。请确认后端服务已启动`,
+    )
+    callbacks.onError?.(err)
+    throw err
+  }
 
   if (!response.ok || !response.body) {
-    throw new Error(`SSE 连接失败: ${response.status}`)
+    const message = await readErrorMessage(response)
+    const err = new Error(message)
+    callbacks.onError?.(err)
+    throw err
   }
 
   const reader = response.body.getReader()
+  // SSE 的 data 字段可能跨 chunk 到达，必须用 stream 模式解码，避免多字节字符被截断
   const decoder = new TextDecoder()
   let buffer = ''
-
-  const parseAndDispatch = (raw: string) => {
-    // SSE 格式：data: {...}\n\n
-    const lines = raw.split('\n')
-    let dataLine = ''
-    for (const line of lines) {
-      if (line.startsWith('data:')) {
-        dataLine += line.slice(5).trimStart()
-      } else if (line === '' && dataLine) {
-        try {
-          callbacks.onEvent(JSON.parse(dataLine) as AgentEvent)
-        } catch {
-          // 忽略非 JSON 数据
-        }
-        dataLine = ''
-      }
-    }
-  }
 
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (done) {
-        break
-      }
+      if (done) break
       buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
+      // 事件以空行分隔；\r\n\r\n 与 \n\n 都要兼容
+      const parts = buffer.split(/\r?\n\r?\n/)
       buffer = parts.pop() ?? ''
       for (const part of parts) {
-        parseAndDispatch(part)
+        dispatch(part, callbacks)
       }
     }
-    if (buffer) {
-      parseAndDispatch(buffer)
-    }
-  } catch (error) {
-    callbacks.onError?.(error as Error)
-  } finally {
+    // flush：处理末尾残留的多字节字符
+    buffer += decoder.decode()
+    if (buffer) dispatch(buffer, callbacks)
     callbacks.onComplete?.()
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      callbacks.onComplete?.()
+      return
+    }
+    callbacks.onError?.(error as Error)
+    throw error
+  }
+}
+
+/** 解析单个 SSE 事件块，取出 data 字段并回调 */
+function dispatch(raw: string, callbacks: {
+  onEvent: (event: AgentEvent) => void
+  onError?: (error: Error) => void
+}): void {
+  const lines = raw.split(/\r?\n/)
+  let dataLine = ''
+  for (const line of lines) {
+    if (line.startsWith('data:')) {
+      dataLine += line.slice(5).trimStart()
+    }
+  }
+  if (!dataLine) return
+  try {
+    callbacks.onEvent(JSON.parse(dataLine) as AgentEvent)
+  } catch {
+    // 忽略非 JSON 数据（如心跳注释行）
+  }
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const text = await response.text()
+    if (!text) return `SSE 连接失败（HTTP ${response.status}）`
+    const parsed = JSON.parse(text) as { message?: string }
+    if (parsed && typeof parsed.message === 'string' && parsed.message) {
+      return parsed.message
+    }
+    return `SSE 连接失败（HTTP ${response.status}）`
+  } catch {
+    return `SSE 连接失败（HTTP ${response.status}）`
   }
 }

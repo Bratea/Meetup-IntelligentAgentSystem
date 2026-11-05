@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { knowledgeApi, type KnowledgeDocument, type KnowledgeSearchResult } from '../api/knowledge'
 import { usePageIntro } from '../hooks/gsap'
 import '../styles/main.scss'
@@ -29,9 +29,37 @@ export default function KnowledgePage() {
     }
   }, [])
 
+  const pollTimerRef = useRef<number | null>(null)
+  const pollCountRef = useRef(0)
+  const MAX_POLLS = 150 // 2s 一次，最多轮询 5 分钟
+
   useEffect(() => {
     load()
+    return () => {
+      if (pollTimerRef.current !== null) {
+        window.clearInterval(pollTimerRef.current)
+      }
+    }
   }, [load])
+
+  // 有文档在 PROCESSING 时轮询刷新；全部结束后自动停止
+  useEffect(() => {
+    const hasProcessing = documents.some((d) => d.status === 'PROCESSING')
+    if (hasProcessing && pollTimerRef.current === null && pollCountRef.current < MAX_POLLS) {
+      pollCountRef.current += 1
+      pollTimerRef.current = window.setInterval(() => {
+        pollCountRef.current += 1
+        if (pollCountRef.current >= MAX_POLLS) {
+          window.clearInterval(pollTimerRef.current!)
+          pollTimerRef.current = null
+        }
+        load()
+      }, 2000)
+    } else if (!hasProcessing && pollTimerRef.current !== null) {
+      window.clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [documents, load])
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,9 +73,9 @@ export default function KnowledgePage() {
       await knowledgeApi.upload(name.trim(), content.trim())
       setName('')
       setContent('')
+      pollCountRef.current = 0
       await load()
-      // 向量化是异步的，稍后刷新状态
-      setTimeout(load, 3000)
+      // 向量化在后台进行，状态由轮询自动刷新
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -78,6 +106,15 @@ export default function KnowledgePage() {
     } finally {
       setSearching(false)
     }
+  }
+
+  const formatTime = (value?: string) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+      + `${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
 
   const statusBadge = (status: string) => {
@@ -192,9 +229,9 @@ export default function KnowledgePage() {
                 </div>
                 <div className="card__meta">
                   分段数: {doc.segmentCount}
-                  {doc.createdAt && ` · 创建于 ${doc.createdAt}`}
+                  {doc.createdAt && ` · 创建于 ${formatTime(doc.createdAt)}`}
                 </div>
-                <div className="knowledge__doc-preview">{doc.content.slice(0, 180)}</div>
+                <div className="knowledge__doc-preview">{doc.contentPreview ?? ''}</div>
               </div>
               <button className="btn btn--sm btn--danger" onClick={() => handleDelete(doc.id)}>
                 删除

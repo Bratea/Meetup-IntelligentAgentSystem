@@ -20,7 +20,8 @@
     <insert id="insert" parameterType="com.xunwu.agent.entity.Message"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO message (conversation_id, role, content, model, tool_calls, created_at)
-        VALUES (#{conversationId}, #{role}, #{content}, #{model}, #{toolCalls}, now())
+        VALUES (#{conversationId}, #{role}, #{content}, #{model},
+                CAST(#{toolCalls} AS jsonb), now())
     </insert>
 
     <select id="selectByConversationId" resultMap="BaseResultMap">

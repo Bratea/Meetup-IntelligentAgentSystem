@@ -24,15 +24,20 @@ spring:
   ai:
     # DeepSeek（OpenAI 兼容协议）
     openai:
-      base-url: https://api.deepseek.com
-      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      # Spring AI 的 OpenAiChatAutoConfiguration 对 api-key 有 Assert.hasText 校验，
+      # 不配置 DEEPSEEK_API_KEY 会直接导致应用启动失败。
+      # 这里用占位值兜底；未配置时 deepseek-chat 会被标记为不可用（available=false），
+      # 前端不会展示、用户也不会选中，更不会被真正调用。
+      api-key: ${DEEPSEEK_API_KEY:sk-not-configured}
       chat:
         options:
           model: deepseek-chat
           temperature: 0.7
     # 智谱 GLM
     zhipuai:
-      api-key: ${ZHIPU_API_KEY:}
+      # 同上：占位值兜底，未配置 ZHIPU_API_KEY 时 glm-4-plus 标记为不可用
+      api-key: ${ZHIPU_API_KEY:sk-not-configured}
       chat:
         options:
           model: glm-4-plus
@@ -74,8 +79,8 @@ xunwu:
 
 logging:
   level:
-    com.xunwu.agent: debug
-    org.springframework.ai: info
+    com.xunwu.agent: info
+    org.springframework.ai: warn
 
 # 健康检查（供 Docker / K8s 探针使用）
 management:

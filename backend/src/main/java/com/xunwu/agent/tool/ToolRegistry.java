@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.ai.tool.metadata.ToolMetadata;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.stereotype.Component;
 
@@ -49,15 +48,6 @@ public class ToolRegistry {
     }
 
     /**
-     * 注册工具（Supplier 形式，无入参）
-     */
-    public void register(String name, String description, ToolType type,
-                         boolean enabled, java.util.function.Supplier<String> handler) {
-        register(name, description, "{}", type, enabled,
-                (args, ctx) -> handler.get());
-    }
-
-    /**
      * 获取工具
      */
     public ToolCallback getTool(String name) {
@@ -70,40 +60,63 @@ public class ToolRegistry {
 
     /**
      * 按名称列表获取工具（过滤未注册与禁用项）
+     *
+     * <p>返回可变列表，方便调用方继续追加固定工具。</p>
      */
     public List<ToolCallback> getTools(List<String> names) {
         if (names == null || names.isEmpty()) {
-            return List.of();
+            return new java.util.ArrayList<>();
         }
         return names.stream()
                 .filter(tools::containsKey)
                 .peek(n -> {
                     if (!tools.get(n).enabled()) {
-                        log.warn("工具 {} 已被禁用", n);
+                        log.warn("工具 {} 已被禁用，已跳过", n);
                     }
                 })
                 .filter(n -> tools.get(n).enabled())
                 .map(n -> tools.get(n).callback())
+                .collect(Collectors.toCollection(java.util.ArrayList::new));
+    }
+
+    /**
+     * 按名称列表获取实际可用的工具名（已过滤未注册与禁用项）。
+     *
+     * <p>用于填充 {@code ToolCallingChatOptions.toolNames}：
+     * Spring AI 的 {@code DefaultToolCallingManager.resolveToolDefinitions} 会对
+     * toolNames 中无法解析的名字抛 {@code IllegalStateException}，
+     * 因此这里必须只返回真正已注册的工具名。</p>
+     */
+    public List<String> resolveToolNames(List<String> names) {
+        if (names == null || names.isEmpty()) {
+            return List.of();
+        }
+        return names.stream()
+                .filter(tools::containsKey)
+                .filter(n -> tools.get(n).enabled())
+                .distinct()
                 .collect(Collectors.toList());
     }
 
     /**
-     * 获取固定工具
+     * 获取固定工具（仅返回启用中的）
      */
     public List<ToolCallback> getFixedTools() {
         return tools.values().stream()
                 .filter(t -> t.type() == ToolType.FIXED)
+                .filter(RegisteredTool::enabled)
                 .map(RegisteredTool::callback)
-                .collect(Collectors.toList());
+                .collect(Collectors.toCollection(java.util.ArrayList::new));
     }
 
     /**
-     * 获取所有可选工具
+     * 获取固定工具名（仅返回启用中的）
      */
-    public List<ToolCallback> getOptionalTools() {
+    public List<String> getFixedToolNames() {
         return tools.values().stream()
-                .filter(t -> t.type() == ToolType.OPTIONAL)
-                .map(RegisteredTool::callback)
+                .filter(t -> t.type() == ToolType.FIXED)
+                .filter(RegisteredTool::enabled)
+                .map(t -> t.definition().name())
                 .collect(Collectors.toList());
     }
 

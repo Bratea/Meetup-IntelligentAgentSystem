@@ -103,3 +103,22 @@
 - `application.yml` 支持 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `OLLAMA_BASE_URL` 等环境变量
 - 新增 `management.endpoint.health` 探针配置
 - README 更新：全栈启动说明、技术栈、项目结构
+
+### P11 自检与修复 ✅
+
+- 通读全部源码，问题清单见 `docs/ISSUES.md`（P0 ×5 / P1 ×10 / P2 ×5 / 第二轮 ×8）。
+- **P0**：补齐 `/api/agents` 控制器；`ToolRegistry.getTools()` 改为可变列表；
+  `AgentExecutor` 改为单次 `ChatClient.stream().chatResponse()` 拿 token 与
+  tool_calls（去掉重复推理）；`toolNames` 过滤为已注册工具；RAG 真正接入对话。
+- **P1**：`DocumentSplitter` 死循环；`KnowledgeService` 用 `TransactionTemplate`
+  隔离远程 HTTP；FAILED 状态不再因回滚丢失；全局异常返回真实 HTTP 状态码且不泄露
+  内部信息；`ChatPage` 默认模型排除 embedding 类型；会话复用 + 历史加载 + 条数上限。
+- **P2**：死代码清理、`CalculatorTool` 负数与除零、前端 SSE 解码 flush、
+  稳定 React key、轮询 `setInterval` + 清理、nginx 上传体积、
+  `Flux.create` + `isCancelled()` 提前终止。
+- **第二轮**：API Key 占位默认值（否则应用起不来）、JSONB 显式 CAST、
+  SSE 错误事件化、MVC 专用异步线程池、向量化错误翻译、Ollama 已安装模型探测、
+  `toolIds` 数组契约、死代码再清理。
+- 本地 Docker 实测通过（Postgres + Ollama）：后端启动无告警，
+  智能体 CRUD / 工具勾选 / SSE 错误路径 / 知识库状态流转 / pgvector 排序均正常，
+  前端四个页面 Playwright 实测零报错。

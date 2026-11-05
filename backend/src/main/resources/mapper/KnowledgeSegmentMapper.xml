@@ -20,14 +20,16 @@
     <insert id="insert" parameterType="com.xunwu.agent.entity.KnowledgeSegment"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO knowledge_segment (document_id, chunk_index, content, embedding, metadata, created_at)
-        VALUES (#{documentId}, #{chunkIndex}, #{content}, #{embedding}::vector, #{metadata}, now())
+        VALUES (#{documentId}, #{chunkIndex}, #{content}, #{embedding}::vector,
+                CAST(#{metadata} AS jsonb), now())
     </insert>
 
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO knowledge_segment (document_id, chunk_index, content, embedding, metadata, created_at)
         VALUES
         <foreach collection="segments" item="s" separator=",">
-            (#{s.documentId}, #{s.chunkIndex}, #{s.content}, #{s.embedding}::vector, #{s.metadata}, now())
+            (#{s.documentId}, #{s.chunkIndex}, #{s.content}, #{s.embedding}::vector,
+             CAST(#{s.metadata} AS jsonb), now())
         </foreach>
     </insert>
 

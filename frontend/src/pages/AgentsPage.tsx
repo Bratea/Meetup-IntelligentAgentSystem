@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { agentApi, type Agent } from '../api/agent'
+import { agentApi, type Agent, type AgentPayload } from '../api/agent'
 import { modelApi, type ModelInfo } from '../api/model'
 import { toolApi, type ToolDefinitionInfo } from '../api/tool'
 import { usePageIntro } from '../hooks/gsap'
@@ -11,8 +11,19 @@ const emptyForm = {
   description: '',
   systemPrompt: '',
   modelId: '',
-  toolIds: '[]',
+  toolIds: [] as string[],
   maxSteps: 8,
+}
+
+/** 数据库里 toolIds 存的是 JSON 字符串，编辑时解析成数组 */
+function parseToolIds(raw?: string): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 export default function AgentsPage() {
@@ -34,7 +45,8 @@ export default function AgentsPage() {
         toolApi.list(),
       ])
       setAgents(agentList)
-      setModels(modelList.filter((m) => m.type === 'chat'))
+      // 只保留可用中的对话模型，避免选到未配置 Key 的远端模型
+      setModels(modelList.filter((m) => m.type === 'chat' && m.available !== false))
       setTools(toolList)
       setError('')
     } catch (err) {
@@ -57,7 +69,7 @@ export default function AgentsPage() {
     setSaving(true)
     setError('')
     try {
-      const payload: Partial<Agent> = {
+      const payload: AgentPayload = {
         name: form.name.trim(),
         description: form.description,
         systemPrompt: form.systemPrompt,
@@ -88,7 +100,7 @@ export default function AgentsPage() {
       description: agent.description ?? '',
       systemPrompt: agent.systemPrompt ?? '',
       modelId: agent.modelId,
-      toolIds: agent.toolIds ?? '[]',
+      toolIds: parseToolIds(agent.toolIds),
       maxSteps: agent.maxSteps,
     })
   }
@@ -104,25 +116,15 @@ export default function AgentsPage() {
   }
 
   const toggleTool = (name: string) => {
-    let current: string[] = []
-    try {
-      current = JSON.parse(form.toolIds || '[]')
-    } catch {
-      current = []
-    }
-    const next = current.includes(name)
-      ? current.filter((n) => n !== name)
-      : [...current, name]
-    setForm((prev) => ({ ...prev, toolIds: JSON.stringify(next) }))
+    setForm((prev) => ({
+      ...prev,
+      toolIds: prev.toolIds.includes(name)
+        ? prev.toolIds.filter((n) => n !== name)
+        : [...prev.toolIds, name],
+    }))
   }
 
-  const selectedTools = (() => {
-    try {
-      return JSON.parse(form.toolIds || '[]') as string[]
-    } catch {
-      return []
-    }
-  })()
+  const selectedTools = form.toolIds
 
   if (loading) {
     return (

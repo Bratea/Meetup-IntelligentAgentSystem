@@ -1,6 +1,8 @@
 package com.xunwu.agent.config;
 
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -8,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @author xunwu
  */
+@Slf4j
 @Data
 @ConfigurationProperties(prefix = "xunwu")
 public class XunwuProperties {
@@ -17,6 +20,32 @@ public class XunwuProperties {
 
     /** RAG 知识库配置 */
     private Rag rag = new Rag();
+
+    /**
+     * 启动时校验配置，避免错误的分段参数把运行期拖入死循环或静默降级。
+     */
+    @PostConstruct
+    public void validate() {
+        if (agent.getMaxSteps() < 1) {
+            throw new IllegalStateException("xunwu.agent.max-steps 必须 >= 1，当前: " + agent.getMaxSteps());
+        }
+        if (rag.getChunkSize() < 1) {
+            throw new IllegalStateException("xunwu.rag.chunk-size 必须 >= 1，当前: " + rag.getChunkSize());
+        }
+        if (rag.getChunkOverlap() < 0) {
+            throw new IllegalStateException("xunwu.rag.chunk-overlap 不能为负数，当前: " + rag.getChunkOverlap());
+        }
+        if (rag.getChunkOverlap() >= rag.getChunkSize()) {
+            throw new IllegalStateException(
+                    "xunwu.rag.chunk-overlap (" + rag.getChunkOverlap()
+                            + ") 必须小于 xunwu.rag.chunk-size (" + rag.getChunkSize() + ")");
+        }
+        if (rag.getTopK() < 1) {
+            throw new IllegalStateException("xunwu.rag.top-k 必须 >= 1，当前: " + rag.getTopK());
+        }
+        log.info("配置校验通过: maxSteps={}, rag.topK={}, rag.chunkSize={}, rag.chunkOverlap={}",
+                agent.getMaxSteps(), rag.getTopK(), rag.getChunkSize(), rag.getChunkOverlap());
+    }
 
     @Data
     public static class Agent {

@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { agentApi, type Agent } from '../api/agent'
 import { modelApi, type ModelInfo } from '../api/model'
 import { streamChat, type AgentEvent } from '../api/chat'
+import {
+  conversationApi,
+  messageApi,
+  type Conversation,
+} from '../api/conversation'
 import { gsap, useGSAP } from '../hooks/gsap'
 import '../styles/main.scss'
 import './ChatPage.scss'
 
 interface ChatMessage {
+  id: string
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
@@ -21,33 +27,72 @@ interface ToolEvent {
 
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([])
-  const [models, setModels] = useState<ModelInfo[]>([])
+  const [chatModels, setChatModels] = useState<ModelInfo[]>([])
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [sending, setSending] = useState(false)
   const [status, setStatus] = useState('')
+  const [enableRag, setEnableRag] = useState(true)
+
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [conversationId, setConversationId] = useState<number | null>(null)
+  const [switchingConversation, setSwitchingConversation] = useState(false)
+
   const abortRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
+  const idSeedRef = useRef(0)
+  const lastCountRef = useRef(0)
+
+  const nextMessageId = () => `m${++idSeedRef.current}`
+
+  const makeMessage = (
+    role: 'user' | 'assistant',
+    content: string,
+    extra?: Partial<ChatMessage>,
+  ): ChatMessage => ({ id: nextMessageId(), role, content, ...extra })
 
   useEffect(() => {
     Promise.all([agentApi.list(), modelApi.list()])
-      .then(([agentList, modelList]) => {
+      .then(([agentList, list]) => {
         setAgents(agentList)
-        setModels(modelList.filter((m) => m.type === 'chat'))
+        // 只保留对话模型；不可用（未配置 API Key / 未安装）的直接排除
+        const filtered = list.filter((m) => m.type === 'chat' && m.available !== false)
+        setChatModels(filtered)
         const defaultAgent = agentList[0]
         if (defaultAgent) {
           setSelectedAgent(defaultAgent)
         }
-        const defaultModel = modelList.find((m) => m.defaultModel) ?? modelList[0]
+        // 只在 chat 类型里挑默认模型，避免选中 embedding 模型导致对话必然失败
+        const defaultModel = filtered.find((m) => m.defaultModel) ?? filtered[0]
         if (defaultModel) {
           setSelectedModel(defaultModel.id)
         }
       })
       .catch((err) => setStatus(`加载失败: ${err.message}`))
   }, [])
+
+  // 模型元信息可能晚于智能体返回，做一次兜底纠正
+  useEffect(() => {
+    if (chatModels.length === 0) return
+    if (!chatModels.some((m) => m.id === selectedModel)) {
+      setSelectedModel((chatModels.find((m) => m.defaultModel) ?? chatModels[0]).id)
+    }
+  }, [chatModels, selectedModel])
+
+  // 智能体切换时拉取它的会话列表
+  useEffect(() => {
+    if (!selectedAgent) {
+      setConversations([])
+      return
+    }
+    conversationApi
+      .list(selectedAgent.id)
+      .then(setConversations)
+      .catch(() => setConversations([]))
+  }, [selectedAgent])
 
   // 页面头部与输入区入场
   useGSAP(
@@ -94,20 +139,27 @@ export default function ChatPage() {
     }
   }, [messages.length])
 
+  // 仅在"消息条数增加"时平滑滚动；流式更新不改变条数，避免持续触发滚动
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messages.length > lastCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+    lastCountRef.current = messages.length
+  }, [messages.length])
 
-  const updateLastAssistant = useCallback((updater: (msg: ChatMessage) => ChatMessage) => {
-    setMessages((prev) => {
-      const next = [...prev]
-      const last = next[next.length - 1]
-      if (last && last.role === 'assistant') {
-        next[next.length - 1] = updater(last)
-      }
-      return next
-    })
-  }, [])
+  const updateLastAssistant = useCallback(
+    (updater: (msg: ChatMessage) => ChatMessage) => {
+      setMessages((prev) => {
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last && last.role === 'assistant') {
+          next[next.length - 1] = updater(last)
+        }
+        return next
+      })
+    },
+    [],
+  )
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
@@ -117,17 +169,35 @@ export default function ChatPage() {
       return
     }
 
-    const userMessage: ChatMessage = { role: 'user', content: text }
-    const assistantMessage: ChatMessage = {
-      role: 'assistant',
-      content: '',
+    const userMessage = makeMessage('user', text)
+    const assistantMessage = makeMessage('assistant', '', {
       streaming: true,
       toolEvents: [],
-    }
+    })
     setMessages((prev) => [...prev, userMessage, assistantMessage])
     setInput('')
     setSending(true)
     setStatus('连接中...')
+
+    // 首次发消息时创建会话，之后复用同一会话
+    let cid = conversationId
+    if (!cid) {
+      try {
+        const created = await conversationApi.create({
+          agentId: selectedAgent.id,
+          title: text.slice(0, 30),
+          status: 'ACTIVE',
+        })
+        cid = created.id
+        setConversationId(cid)
+        setConversations((prev) => [created, ...prev])
+      } catch (err) {
+        setStatus(`创建会话失败: ${(err as Error).message}`)
+        setSending(false)
+        updateLastAssistant((msg) => ({ ...msg, streaming: false }))
+        return
+      }
+    }
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -136,8 +206,10 @@ export default function ChatPage() {
       await streamChat(
         {
           agentId: selectedAgent.id,
+          conversationId: cid,
           message: text,
           modelId: selectedModel || undefined,
+          enableRag,
         },
         {
           onEvent: (event: AgentEvent) => {
@@ -183,9 +255,12 @@ export default function ChatPage() {
                 setStatus('已达最大执行步数')
                 break
               case 'error':
+                // 服务端已把异常翻译成可读提示，直接展示给用户
                 updateLastAssistant((msg) => ({
                   ...msg,
-                  content: msg.content || `执行出错: ${String(event.data)}`,
+                  content: msg.content
+                    ? `${msg.content}\n\n⚠️ ${String(event.data)}`
+                    : `执行出错：${String(event.data)}`,
                   streaming: false,
                 }))
                 setStatus('执行失败')
@@ -207,7 +282,15 @@ export default function ChatPage() {
       setSending(false)
       updateLastAssistant((msg) => ({ ...msg, streaming: false }))
     }
-  }, [input, sending, selectedAgent, selectedModel, updateLastAssistant])
+  }, [
+    input,
+    sending,
+    selectedAgent,
+    selectedModel,
+    conversationId,
+    enableRag,
+    updateLastAssistant,
+  ])
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
@@ -217,8 +300,37 @@ export default function ChatPage() {
 
   const handleClear = useCallback(() => {
     setMessages([])
+    setConversationId(null)
     setStatus('')
   }, [])
+
+  const handleSelectConversation = useCallback(
+    async (id: number) => {
+      if (sending || switchingConversation) return
+      setSwitchingConversation(true)
+      setConversationId(id)
+      try {
+        const history = await messageApi.list(id)
+        setMessages(
+          history
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) =>
+              makeMessage(m.role as 'user' | 'assistant', m.content),
+            ),
+        )
+        setStatus('')
+        requestAnimationFrame(() =>
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }),
+        )
+      } catch (err) {
+        setStatus(`加载会话失败: ${(err as Error).message}`)
+        setMessages([])
+      } finally {
+        setSwitchingConversation(false)
+      }
+    },
+    [sending, switchingConversation],
+  )
 
   return (
     <div className="page">
@@ -236,6 +348,9 @@ export default function ChatPage() {
             onChange={(e) => {
               const agent = agents.find((a) => a.id === Number(e.target.value))
               setSelectedAgent(agent ?? null)
+              setConversationId(null)
+              setMessages([])
+              setStatus('')
             }}
           >
             {agents.length === 0 && <option value="">暂无智能体</option>}
@@ -251,12 +366,41 @@ export default function ChatPage() {
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
           >
-            {models.map((m) => (
+            {chatModels.length === 0 && <option value="">暂无可用模型</option>}
+            {chatModels.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
             ))}
           </select>
+
+          <select
+            className="select chat__select"
+            value={conversationId ?? ''}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value) {
+                void handleSelectConversation(Number(value))
+              }
+            }}
+            disabled={sending || switchingConversation}
+          >
+            <option value="">新会话</option>
+            {conversations.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title || `会话 ${c.id}`}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className={`btn btn--sm ${enableRag ? 'btn--ghost' : 'btn--sm'}`}
+            onClick={() => setEnableRag((v) => !v)}
+            disabled={sending}
+            title={enableRag ? '已启用知识库检索' : '未启用知识库检索'}
+          >
+            {enableRag ? 'RAG 开' : 'RAG 关'}
+          </button>
 
           <button className="btn btn--sm" onClick={handleClear} disabled={sending}>
             清空
@@ -290,8 +434,8 @@ export default function ChatPage() {
           </div>
         )}
 
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message message--${msg.role}`}>
+        {messages.map((msg) => (
+          <div key={msg.id} className={`message message--${msg.role}`}>
             <div className="message__avatar">
               {msg.role === 'user' ? '我' : '寻'}
             </div>
@@ -307,7 +451,7 @@ export default function ChatPage() {
               {msg.toolEvents && msg.toolEvents.length > 0 && (
                 <div className="message__tools">
                   {msg.toolEvents.map((tool, i) => (
-                    <div key={i} className="tool-call">
+                    <div key={`${tool.name}-${i}`} className="tool-call">
                       <div className="tool-call__header">
                         <span className="tool-call__icon">🔧</span>
                         <span className="tool-call__name">{tool.name}</span>
@@ -331,6 +475,11 @@ export default function ChatPage() {
 
       <div className="chat__composer">
         {status && <div className="chat__status">{status}</div>}
+        {!selectedAgent && (
+          <div className="chat__status chat__status--warn">
+            请先在「智能体」页创建并选择一个智能体，再开始对话
+          </div>
+        )}
         <div className="chat__input-row">
           <textarea
             className="textarea chat__textarea"
@@ -340,7 +489,7 @@ export default function ChatPage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                handleSend()
+                void handleSend()
               }
             }}
             disabled={sending}
@@ -350,7 +499,11 @@ export default function ChatPage() {
               停止
             </button>
           ) : (
-            <button className="btn btn--primary" onClick={handleSend} disabled={!input.trim()}>
+            <button
+              className="btn btn--primary"
+              onClick={handleSend}
+              disabled={!input.trim() || !selectedAgent}
+            >
               发送
             </button>
           )}
