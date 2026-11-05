@@ -1,0 +1,83 @@
+// ============================================================
+// 寻晤智能agent系统 - 设计变量
+// ============================================================
+
+// ---------- 颜色 ----------
+$color-bg: #0d1017;
+$color-bg-soft: #131722;
+$color-bg-card: #1a1f2b;
+$color-bg-elevated: #212838;
+$color-border: #2a3140;
+$color-border-strong: #3a4356;
+
+$color-text: #e8ebf2;
+$color-text-dim: #98a1b3;
+$color-text-muted: #6b7484;
+
+$color-primary: #5b8cff;
+$color-primary-hover: #4a7bf0;
+$color-primary-soft: rgba(91, 140, 255, 0.14);
+$color-accent: #8b6cff;
+$color-accent-soft: rgba(139, 108, 255, 0.14);
+
+$color-success: #3ddc97;
+$color-success-soft: rgba(61, 220, 151, 0.14);
+$color-warning: #f5b04a;
+$color-warning-soft: rgba(245, 176, 74, 0.14);
+$color-danger: #ff5d73;
+$color-danger-soft: rgba(255, 93, 115, 0.14);
+
+// ---------- 渐变 ----------
+$gradient-primary: linear-gradient(135deg, $color-primary, $color-accent);
+$gradient-bg: radial-gradient(
+    1200px 600px at 80% -10%,
+    rgba(91, 140, 255, 0.12),
+    transparent 60%
+  ),
+  radial-gradient(900px 500px at -10% 110%, rgba(139, 108, 255, 0.1), transparent 55%);
+
+// ---------- 尺寸 ----------
+$sidebar-width: 236px;
+$radius-sm: 7px;
+$radius: 10px;
+$radius-lg: 14px;
+$radius-pill: 999px;
+
+// ---------- 间距 ----------
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 12px;
+$space-lg: 16px;
+$space-xl: 20px;
+$space-2xl: 24px;
+$space-3xl: 32px;
+
+// ---------- 字体 ----------
+$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+  'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+$font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+
+$font-size-xs: 11px;
+$font-size-sm: 12px;
+$font-size-base: 14px;
+$font-size-md: 15px;
+$font-size-lg: 17px;
+$font-size-xl: 21px;
+$font-size-2xl: 26px;
+
+// ---------- 阴影 ----------
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+$shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+$shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+$shadow-glow: 0 0 0 3px rgba(91, 140, 255, 0.25);
+
+// ---------- 过渡 ----------
+$transition-fast: 0.15s ease;
+$transition: 0.22s ease;
+$transition-slow: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+
+// ---------- 层级 ----------
+$z-sidebar: 10;
+$z-header: 20;
+$z-modal: 100;
+$z-toast: 200;

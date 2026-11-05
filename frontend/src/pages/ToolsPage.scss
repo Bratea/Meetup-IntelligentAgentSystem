@@ -1,0 +1,73 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.tools {
+  max-width: 1200px;
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: $space-md;
+  }
+
+  &__card {
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, $color-accent, transparent);
+      opacity: 0;
+      transition: opacity $transition;
+    }
+
+    &:hover::before {
+      opacity: 1;
+    }
+
+    &-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: $space-sm;
+    }
+
+    &-name {
+      font-weight: 650;
+      font-size: $font-size-base;
+      color: $color-primary;
+      font-family: $font-mono;
+    }
+
+    &-desc {
+      margin-top: 8px;
+      font-size: $font-size-sm;
+      color: $color-text-dim;
+      line-height: 1.6;
+      min-height: 2.5em;
+    }
+
+    &-schema {
+      margin: $space-md 0 0;
+      padding: 9px 11px;
+      background: $color-bg-soft;
+      border-radius: $radius-sm;
+      font-size: $font-size-xs;
+      color: $color-text-dim;
+      overflow-x: auto;
+      line-height: 1.6;
+      border: 1px solid $color-border;
+    }
+  }
+
+  &__empty {
+    padding: 80px 20px;
+    text-align: center;
+    color: $color-text-dim;
+  }
+}

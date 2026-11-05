@@ -1,0 +1,121 @@
+// ============================================================
+// 寻晤智能agent系统 - SCSS Mixins
+// ============================================================
+@use 'sass:math';
+@use 'variables' as *;
+
+// ---------- 弹性布局 ----------
+@mixin flex($direction: row, $align: center, $justify: flex-start, $gap: 0) {
+  display: flex;
+  flex-direction: $direction;
+  align-items: $align;
+  justify-content: $justify;
+  gap: $gap;
+}
+
+// ---------- 单行省略 ----------
+@mixin ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// ---------- 多行省略 ----------
+@mixin line-clamp($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// ---------- 玻璃拟态卡片 ----------
+@mixin glass($bg: $color-bg-card, $border: $color-border) {
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius;
+  backdrop-filter: blur(8px);
+}
+
+// ---------- 发光边框（hover 态） ----------
+@mixin glow-border($color: $color-primary) {
+  position: relative;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, $color, transparent 60%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity $transition;
+    pointer-events: none;
+  }
+  &:hover::after {
+    opacity: 1;
+  }
+}
+
+// ---------- 滚动条 ----------
+@mixin scrollbar($size: 8px) {
+  &::-webkit-scrollbar {
+    width: $size;
+    height: $size;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: $color-border;
+    border-radius: math.div($size, 2);
+    &:hover {
+      background: $color-border-strong;
+    }
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+// ---------- 文字渐变 ----------
+@mixin text-gradient($from: $color-primary, $to: $color-accent) {
+  background: linear-gradient(120deg, $from, $to);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+// ---------- 脉冲动画 ----------
+@mixin pulse($color: $color-primary) {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: $color;
+    animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+// ---------- 错误提示条 ----------
+@mixin error-banner {
+  background: $color-danger-soft;
+  border: 1px solid rgba(255, 93, 115, 0.4);
+  color: $color-danger;
+  padding: 10px 14px;
+  border-radius: $radius-sm;
+  margin-bottom: $space-md;
+  font-size: $font-size-sm;
+}

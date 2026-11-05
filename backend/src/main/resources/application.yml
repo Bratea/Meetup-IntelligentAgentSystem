@@ -10,9 +10,9 @@ spring:
   application:
     name: xunwu-agent
   datasource:
-    url: jdbc:postgresql://localhost:5432/xunwu_agent
-    username: xunwu
-    password: xunwu123
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/xunwu_agent}
+    username: ${DB_USERNAME:xunwu}
+    password: ${DB_PASSWORD:xunwu123}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -39,7 +39,7 @@ spring:
           temperature: 0.7
     # Ollama 本地模型
     ollama:
-      base-url: http://localhost:11434
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
         options:
           model: qwen2.5:7b
@@ -76,3 +76,15 @@ logging:
   level:
     com.xunwu.agent: debug
     org.springframework.ai: info
+
+# 健康检查（供 Docker / K8s 探针使用）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

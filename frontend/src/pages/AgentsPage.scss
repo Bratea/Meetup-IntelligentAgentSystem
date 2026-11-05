@@ -1,0 +1,112 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.agents {
+  max-width: 1100px;
+
+  &__error {
+    @include error-banner;
+  }
+
+  &__form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0 $space-lg;
+  }
+
+  &__tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space-sm;
+  }
+
+  &__tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border-radius: $radius-pill;
+    border: 1px solid $color-border;
+    background: $color-bg-soft;
+    cursor: pointer;
+    font-size: $font-size-sm;
+    transition: border-color $transition-fast, background $transition-fast,
+      transform $transition-fast, box-shadow $transition-fast;
+
+    &:hover {
+      border-color: $color-border-strong;
+      transform: translateY(-1px);
+    }
+
+    input {
+      accent-color: $color-primary;
+      margin: 0;
+    }
+
+    &--active {
+      border-color: $color-primary;
+      background: $color-primary-soft;
+      box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.15);
+    }
+  }
+
+  &__actions {
+    display: flex;
+    gap: $space-md;
+    margin-top: $space-xs;
+  }
+
+  &__list {
+    margin-top: $space-xl;
+  }
+
+  &__item {
+    display: flex;
+    gap: $space-lg;
+    align-items: flex-start;
+  }
+
+  &__item-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__item-head {
+    display: flex;
+    align-items: center;
+    gap: $space-md;
+  }
+
+  &__item-name {
+    font-size: $font-size-md;
+    font-weight: 650;
+  }
+
+  &__item-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: $space-sm;
+  }
+
+  &__prompt {
+    margin: $space-md 0 0;
+    padding: $space-md $space-lg;
+    background: $color-bg-soft;
+    border-radius: $radius-sm;
+    font-size: $font-size-sm;
+    color: $color-text-dim;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow: auto;
+    @include scrollbar(6px);
+    line-height: 1.7;
+  }
+
+  &__item-actions {
+    display: flex;
+    gap: $space-sm;
+    flex-shrink: 0;
+  }
+}

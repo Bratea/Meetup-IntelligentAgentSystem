@@ -1,0 +1,107 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.knowledge {
+  max-width: 1100px;
+
+  &__error {
+    @include error-banner;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: $space-lg;
+    align-items: start;
+  }
+
+  &__textarea {
+    min-height: 150px;
+  }
+
+  &__results {
+    margin-top: $space-lg;
+    display: flex;
+    flex-direction: column;
+    gap: $space-md;
+  }
+
+  &__result {
+    background: $color-bg-soft;
+    border: 1px solid $color-border;
+    border-left: 3px solid $color-primary;
+    border-radius: $radius-sm;
+    padding: $space-md $space-lg;
+    transition: border-color $transition, transform $transition-fast;
+
+    &:hover {
+      border-color: $color-border-strong;
+      border-left-color: $color-accent;
+      transform: translateX(3px);
+    }
+  }
+
+  &__result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $space-md;
+    margin-bottom: 6px;
+  }
+
+  &__result-doc {
+    font-size: $font-size-sm;
+    font-weight: 650;
+  }
+
+  &__result-content {
+    font-size: $font-size-sm;
+    color: $color-text-dim;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 150px;
+    overflow: auto;
+    @include scrollbar(6px);
+    line-height: 1.7;
+  }
+
+  &__list {
+    margin-top: $space-xl;
+
+    > .card__title {
+      margin-bottom: $space-md;
+    }
+  }
+
+  &__doc {
+    display: flex;
+    gap: $space-lg;
+    align-items: flex-start;
+  }
+
+  &__doc-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__doc-head {
+    display: flex;
+    align-items: center;
+    gap: $space-md;
+    margin-bottom: 4px;
+  }
+
+  &__doc-name {
+    font-size: $font-size-md;
+    font-weight: 650;
+  }
+
+  &__doc-preview {
+    margin-top: $space-sm;
+    font-size: $font-size-sm;
+    color: $color-text-dim;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.7;
+  }
+}

@@ -1,0 +1,151 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+
+  // ==================== 侧边栏 ====================
+  &__sidebar {
+    width: $sidebar-width;
+    flex-shrink: 0;
+    background: rgba(19, 23, 34, 0.85);
+    backdrop-filter: blur(16px);
+    border-right: 1px solid $color-border;
+    display: flex;
+    flex-direction: column;
+    padding: $space-lg $space-md;
+    position: relative;
+    z-index: $z-sidebar;
+
+    // 右侧渐变光晕
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -1px;
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(
+        180deg,
+        transparent,
+        rgba(91, 140, 255, 0.4),
+        transparent
+      );
+    }
+  }
+
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: $space-md;
+    padding: $space-sm $space-sm $space-lg;
+    border-bottom: 1px solid $color-border;
+    margin-bottom: $space-md;
+  }
+
+  &__logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    background: $gradient-primary;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(91, 140, 255, 0.45);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    min-width: 0;
+  }
+
+  &__title-main {
+    font-size: $font-size-base;
+    font-weight: 650;
+    line-height: 1.3;
+    letter-spacing: 0.2px;
+  }
+
+  &__title-sub {
+    font-size: 10px;
+    color: $color-text-muted;
+    letter-spacing: 0.4px;
+  }
+
+  &__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+  }
+
+  &__nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 9px 12px;
+    border-radius: $radius-sm;
+    color: $color-text-dim;
+    font-size: $font-size-base;
+    transition: background $transition, color $transition, transform $transition-fast;
+
+    &:hover {
+      background: $color-bg-card;
+      color: $color-text;
+    }
+
+    &--active {
+      background: $color-primary-soft;
+      color: $color-primary;
+      font-weight: 550;
+
+      // 左侧高亮条
+      &::before {
+        content: '';
+        position: absolute;
+        left: -$space-md;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 22px;
+        border-radius: 0 3px 3px 0;
+        background: $gradient-primary;
+        box-shadow: 0 0 12px rgba(91, 140, 255, 0.7);
+      }
+    }
+  }
+
+  &__footer {
+    padding: $space-md $space-sm $space-xs;
+    border-top: 1px solid $color-border;
+    font-size: 10px;
+    color: $color-text-muted;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    letter-spacing: 0.2px;
+  }
+
+  &__footer-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: $color-success;
+    box-shadow: 0 0 8px $color-success;
+    flex-shrink: 0;
+  }
+
+  // ==================== 主区域 ====================
+  &__main {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+  }
+}

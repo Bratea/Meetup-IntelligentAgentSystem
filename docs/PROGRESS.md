@@ -13,10 +13,10 @@
 | P4 | 工具系统：Tool 接口、ToolCallingManager、内置工具 | ✅ 完成 | `50e777a` |
 | P5 | Agent 执行引擎：Think-Execute 循环、状态机、最大步数 | ✅ 完成 | `6ec38eb` |
 | P6 | SSE 流式接口 + 会话/消息管理 | ✅ 完成 | `244f0c3` |
-| P7 | RAG：pgvector 向量存储、bge-m3、HNSW、TopK 检索 | ✅ 完成 | 见下方提交 |
-| P8 | 前端：Vite + TS 脚手架、聊天页（SSE 实时渲染） | ⬜ 待开始 | — |
-| P9 | 前端：智能体/知识库/模型/工具管理页 | ⬜ 待开始 | — |
-| P10 | 联调、测试、README、部署文档收尾 | ⬜ 待开始 | — |
+| P7 | RAG：pgvector 向量存储、bge-m3、HNSW、TopK 检索 | ✅ 完成 | `3bd33b2` |
+| P8 | 前端：Vite + TS + SCSS 脚手架、聊天页（SSE 实时渲染） | ✅ 完成 | 见下方提交 |
+| P9 | 前端：智能体/知识库/模型/工具管理页 + GSAP 动画 | ✅ 完成 | 见下方提交 |
+| P10 | 部署配置（Dockerfile / nginx / compose）、README 收尾 | ✅ 完成 | 见下方提交 |
 
 ## 详细记录
 
@@ -77,14 +77,29 @@
 - `KnowledgeService`：文档入库、分段、批量向量化、状态管理
 - 接口：`GET/POST/DELETE /api/knowledge/documents`、`POST /api/knowledge/search`
 
-### P8 前端脚手架 + 聊天页 ⬜
+### P8 前端脚手架 + 聊天页 ✅
 
-- 待实现：Vite + React + TS、SSE 实时渲染
+- Vite 6 + React 19 + TypeScript 5.8 脚手架
+- **SCSS 设计系统**：`variables.scss`（颜色/渐变/尺寸/阴影/层级）、`mixins.scss`（glass / glow-border / text-gradient / scrollbar / pulse）、`main.scss`（全局组件类）
+- `Layout`：侧边栏 + 导航 + 状态指示
+- `ChatPage`：SSE 流式渲染（fetch + ReadableStream）、工具调用可视化、多模型/智能体切换
+- 欢迎空状态 + 快捷提问 chips
 
-### P9 前端管理页 ⬜
+### P9 前端管理页 + 动画 ✅
 
-- 待实现：智能体/知识库/模型/工具管理
+- `AgentsPage`：智能体 CRUD + 工具勾选
+- `KnowledgePage`：文档上传 + 检索测试
+- `ModelsPage`：模型分组卡片
+- `ToolsPage`：工具卡片 + Schema 展示
+- **GSAP 动画**：侧边栏入场 stagger、页面入场、消息/工具调用入场、路由切换过渡
+- 构建产物：JS 359 kB（gzip 119 kB）、CSS 18.8 kB（gzip 4.3 kB）
 
-### P10 联调收尾 ⬜
+### P10 部署配置收尾 ✅
 
-- 待实现：端到端联调、测试、部署文档
+- `backend/Dockerfile`：多阶段构建（Maven 打包 → JRE 运行）
+- `frontend/Dockerfile`：多阶段构建（Node 构建 → nginx 托管）
+- `frontend/nginx.conf`：SPA 路由回退 + `/api` 反代（SSE 关闭缓冲）
+- `docker-compose.yml` 扩展为全栈编排（postgres + ollama + backend + frontend）
+- `application.yml` 支持 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `OLLAMA_BASE_URL` 等环境变量
+- 新增 `management.endpoint.health` 探针配置
+- README 更新：全栈启动说明、技术栈、项目结构

@@ -4,15 +4,18 @@ target/
 *.jar
 *.war
 *.ear
-.mvn/
+.mvn/*
 mvnw
 mvnw.cmd
 !.mvn/wrapper/maven-wrapper.jar
+# 保留 Maven 镜像配置（Docker 构建与本地构建都依赖它）
+!.mvn/settings.xml
 
 # ===================== Node / Frontend =====================
 node_modules/
 dist/
 dist-ssr/
+*.tsbuildinfo
 .vite/
 *.local
 npm-debug.log*

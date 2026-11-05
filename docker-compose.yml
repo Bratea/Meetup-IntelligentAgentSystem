@@ -41,6 +41,45 @@ services:
     networks:
       - xunwu-net
 
+  # ===================== 后端服务 (Spring Boot) =====================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: xunwu-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      DB_URL: jdbc:postgresql://xunwu-postgres:5432/xunwu_agent
+      DB_USERNAME: xunwu
+      DB_PASSWORD: xunwu123
+      OLLAMA_BASE_URL: http://xunwu-ollama:11434
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+    ports:
+      - "8080:8080"
+    networks:
+      - xunwu-net
+
+  # ===================== 前端服务 (React + nginx) =====================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xunwu-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - xunwu-net
+
 volumes:
   postgres_data:
     driver: local
