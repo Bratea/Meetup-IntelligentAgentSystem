@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xunwu.agent.mapper.KnowledgeSegmentMapper">
+
+    <resultMap id="BaseResultMap" type="com.xunwu.agent.entity.KnowledgeSegment">
+        <id column="id" property="id"/>
+        <result column="document_id" property="documentId"/>
+        <result column="chunk_index" property="chunkIndex"/>
+        <result column="content" property="content"/>
+        <result column="embedding" property="embedding"/>
+        <result column="metadata" property="metadata"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, document_id, chunk_index, content, embedding, metadata, created_at
+    </sql>
+
+    <insert id="insert" parameterType="com.xunwu.agent.entity.KnowledgeSegment"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_segment (document_id, chunk_index, content, embedding, metadata, created_at)
+        VALUES (#{documentId}, #{chunkIndex}, #{content}, #{embedding}::vector, #{metadata}, now())
+    </insert>
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO knowledge_segment (document_id, chunk_index, content, embedding, metadata, created_at)
+        VALUES
+        <foreach collection="segments" item="s" separator=",">
+            (#{s.documentId}, #{s.chunkIndex}, #{s.content}, #{s.embedding}::vector, #{s.metadata}, now())
+        </foreach>
+    </insert>
+
+    <select id="selectByDocumentId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge_segment
+        WHERE document_id = #{documentId}
+        ORDER BY chunk_index ASC
+    </select>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM knowledge_segment
+        WHERE id = #{id}
+    </select>
+
+    <delete id="deleteByDocumentId">
+        DELETE FROM knowledge_segment WHERE document_id = #{documentId}
+    </delete>
+
+    <!--
+      向量相似度检索：使用余弦距离 <=>
+      HNSW 索引 idx_knowledge_segment_embedding_hnsw 加速
+      similarity = 1 - cosineDistance
+    -->
+    <select id="searchSimilar" resultType="com.xunwu.agent.entity.KnowledgeSearchResult">
+        SELECT s.id                AS id,
+               s.document_id       AS documentId,
+               d.name              AS documentName,
+               s.content           AS content,
+               (1 - (s.embedding &lt;=> #{embedding}::vector)) AS similarity
+        FROM knowledge_segment s
+                 LEFT JOIN knowledge_document d ON d.id = s.document_id
+        ORDER BY s.embedding &lt;=> #{embedding}::vector
+        LIMIT #{limit}
+    </select>
+
+    <select id="countByDocumentId" resultType="long">
+        SELECT count(*)
+        FROM knowledge_segment
+        WHERE document_id = #{documentId}
+    </select>
+
+</mapper>

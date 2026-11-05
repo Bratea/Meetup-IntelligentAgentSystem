@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xunwu.agent.mapper.AgentMapper">
+
+    <resultMap id="BaseResultMap" type="com.xunwu.agent.entity.Agent">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="system_prompt" property="systemPrompt"/>
+        <result column="avatar" property="avatar"/>
+        <result column="model_id" property="modelId"/>
+        <result column="tool_ids" property="toolIds"/>
+        <result column="max_steps" property="maxSteps"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, description, system_prompt, avatar, model_id, tool_ids,
+        max_steps, status, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.xunwu.agent.entity.Agent"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent (name, description, system_prompt, avatar, model_id,
+                           tool_ids, max_steps, status, created_at, updated_at)
+        VALUES (#{name}, #{description}, #{systemPrompt}, #{avatar}, #{modelId},
+                #{toolIds}, #{maxSteps}, #{status}, now(), now())
+    </insert>
+
+    <update id="update" parameterType="com.xunwu.agent.entity.Agent">
+        UPDATE agent
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="systemPrompt != null">system_prompt = #{systemPrompt},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="modelId != null">model_id = #{modelId},</if>
+            <if test="toolIds != null">tool_ids = #{toolIds},</if>
+            <if test="maxSteps != null">max_steps = #{maxSteps},</if>
+            <if test="status != null">status = #{status},</if>
+            updated_at = now()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM agent
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM agent
+        ORDER BY updated_at DESC
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM agent WHERE id = #{id}
+    </delete>
+
+</mapper>

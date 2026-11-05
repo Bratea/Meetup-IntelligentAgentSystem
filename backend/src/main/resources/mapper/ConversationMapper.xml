@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xunwu.agent.mapper.ConversationMapper">
+
+    <resultMap id="BaseResultMap" type="com.xunwu.agent.entity.Conversation">
+        <id column="id" property="id"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="title" property="title"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, agent_id, title, status, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.xunwu.agent.entity.Conversation"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO conversation (agent_id, title, status, created_at, updated_at)
+        VALUES (#{agentId}, #{title}, #{status}, now(), now())
+    </insert>
+
+    <update id="update" parameterType="com.xunwu.agent.entity.Conversation">
+        UPDATE conversation
+        <set>
+            <if test="agentId != null">agent_id = #{agentId},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="status != null">status = #{status},</if>
+            updated_at = now()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM conversation
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByAgentId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM conversation
+        WHERE agent_id = #{agentId}
+        ORDER BY updated_at DESC
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM conversation
+        ORDER BY updated_at DESC
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM conversation WHERE id = #{id}
+    </delete>
+
+</mapper>

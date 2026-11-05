@@ -1,0 +1,78 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+      enabled: true
+
+spring:
+  application:
+    name: xunwu-agent
+  datasource:
+    url: jdbc:postgresql://localhost:5432/xunwu_agent
+    username: xunwu
+    password: xunwu123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Shanghai
+  ai:
+    # DeepSeek（OpenAI 兼容协议）
+    openai:
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+    # 智谱 GLM
+    zhipuai:
+      api-key: ${ZHIPU_API_KEY:}
+      chat:
+        options:
+          model: glm-4-plus
+          temperature: 0.7
+    # Ollama 本地模型
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen2.5:7b
+          temperature: 0.7
+      embedding:
+        options:
+          model: bge-m3
+
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.xunwu.agent.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    default-enum-type-handler: org.apache.ibatis.type.EnumOrdinalTypeHandler
+
+# 寻晤智能agent系统 自定义配置
+xunwu:
+  agent:
+    # 单次任务最大执行步数（防止智能体无限循环）
+    max-steps: 8
+    # 默认模型
+    default-model: qwen2.5:7b
+  rag:
+    # Top-K 检索数量
+    top-k: 4
+    # 文档分段长度
+    chunk-size: 500
+    # 分段重叠长度
+    chunk-overlap: 50
+    # 向量维度（bge-m3）
+    embedding-dimensions: 1024
+
+logging:
+  level:
+    com.xunwu.agent: debug
+    org.springframework.ai: info
