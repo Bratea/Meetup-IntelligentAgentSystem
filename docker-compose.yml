@@ -1,0 +1,52 @@
+name: xunwu-agent
+
+services:
+  # ===================== PostgreSQL + pgvector =====================
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: xunwu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: xunwu_agent
+      POSTGRES_USER: xunwu
+      POSTGRES_PASSWORD: xunwu123
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xunwu -d xunwu_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - xunwu-net
+
+  # ===================== Ollama (本地模型) =====================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: xunwu-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - xunwu-net
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  xunwu-net:
+    driver: bridge
