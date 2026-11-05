@@ -52,10 +52,8 @@ public class AgentController {
     public ApiResponse<Agent> create(@RequestBody AgentRequest request) {
         Agent agent = new Agent();
         applyRequest(agent, request, true);
-        // 新增时补齐必填默认值，避免触发 DB 非空约束
-        if (agent.getModelId() == null || agent.getModelId().isBlank()) {
-            throw BizException.badRequest("modelId 不能为空");
-        }
+        // 新增时补齐必填默认值，避免触发 DB 非空约束。
+        // modelId 不强制：为空时由 INSERT 的 COALESCE 落到 'qwen2.5:7b'。
         if (agent.getStatus() == null || agent.getStatus().isBlank()) {
             agent.setStatus("ACTIVE");
         }
