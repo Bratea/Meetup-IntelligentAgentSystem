@@ -59,6 +59,8 @@ services:
       DB_USERNAME: xunwu
       DB_PASSWORD: xunwu123
       OLLAMA_BASE_URL: http://xunwu-ollama:11434
+      # 未配置时为空串；后端 ApiKeyPlaceholderEnvironmentPostProcessor
+      # 会把空串改写为占位值，避免 Spring AI 的非空断言导致启动失败
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
     ports:

@@ -288,6 +288,34 @@ Ollama 返回 404 时 Spring AI 抛的是 `NonTransientAiException`，
 - `ModelInfo` / `CurrentTimeTool` / `AgentController` 的 `ObjectMapper`
   提升为 `static final`，避免每次调用新建实例。
 
+### 29. ✅ Docker 环境下后端无法启动：空串 API Key 触发 Spring AI 断言
+
+`docker-compose.yml` 里 `${DEEPSEEK_API_KEY:-}` 在用户未配置时传的是**空串**，
+而 Spring 占位符 `${VAR:default}` 只在变量**未定义**时才取默认值 —— 变量存在但为空串
+仍然拿到空串。于是 `OpenAIAutoConfigurationUtil.resolveConnectionProperties()` 的
+`Assert.hasText` 直接失败，`ChatClientRegistry` 初始化中断，后端容器反复重启。
+（`ZhiPuAiChatAutoConfiguration` 同样有 `hasText` 断言。）
+
+- 新增 `ApiKeyPlaceholderEnvironmentPostProcessor`（注册在
+  `META-INF/spring.factories`），把空白的 `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY`
+  改写为占位值 `sk-not-configured`。
+- `ChatClientRegistry` 新增 `PLACEHOLDER_API_KEY` 常量，`hasText()` 会把占位值
+  识别为"未配置"，不会误报模型可用。
+- 本地开发显式 `export DEEPSEEK_API_KEY=` 的场景同样被覆盖。
+
+### 30. ✅ 前端容器 HEALTHCHECK 一直 unhealthy
+
+`wget -qO- http://localhost/` 失败：Alpine 镜像里 `localhost` 只解析到 `::1`，
+而 nginx 只 `listen 80`（IPv4）。
+
+- HEALTHCHECK 改用 `http://127.0.0.1/`。
+- `nginx.conf` 补 `listen [::]:80;`。
+
+### 31. ✅ 模型 API Key 占位值语义
+
+- `docker-compose.yml` 补注释说明空串会被后处理器改写。
+- `.env.example` 保持空值样例，用户复制后不会导致启动失败。
+
 ---
 
 ## ✅ 已确认正常的部分
@@ -316,6 +344,11 @@ Ollama 返回 404 时 Spring AI 抛的是 `NonTransientAiException`，
   - pgvector 余弦检索 SQL 实测排序正确（同向/正交/反向三组向量）。
   - 前端 Playwright 实测：对话页、智能体页、知识库页、模型页均无
     console error / pageerror，空模型时显示"暂无可用模型"。
+- **Docker Compose 全栈实测**（postgres + ollama + backend + frontend）：
+  四个容器全部 healthy，`/api/health` 返回 UP（database + ollama 均 UP），
+  nginx 首页 HTTP 200，`/api/models`、`/api/agents`、`/api/knowledge/search`、
+  `/api/chat/stream` 经 nginx 反代全部正常；
+  前端 Playwright 走 80 端口实测对话、知识库上传、智能体页零报错。
 - Spring AI 1.1.0 工具调用语义已做字节码级核对：
   `OllamaChatOptions` 实现 `ToolCallingChatOptions`，
   `OllamaChatModel.buildRequestPrompt()` 会把传入的 `ToolCallingChatOptions`

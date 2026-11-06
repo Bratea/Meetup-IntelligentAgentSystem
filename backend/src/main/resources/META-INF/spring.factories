@@ -1,0 +1,7 @@
+# 寻晤智能agent系统 —— Spring Boot 环境后处理器
+#
+# 把空白的模型 API Key 环境变量改写为占位值，
+# 否则 Spring AI 的 OpenAiChatAutoConfiguration / ZhiPuAiChatAutoConfiguration
+# 会因 Assert.hasText 校验失败导致应用无法启动。
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.xunwu.agent.config.ApiKeyPlaceholderEnvironmentPostProcessor

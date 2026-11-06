@@ -38,6 +38,14 @@ import java.util.regex.Pattern;
 @Component
 public class ChatClientRegistry {
 
+    /**
+     * 未配置模型 API Key 时使用的占位值。
+     *
+     * <p>仅用于通过 Spring AI 对 api-key 的 {@code Assert.hasText} 非空断言，
+     * 不代表任何真实凭据。{@link #hasText(String)} 会把它识别为"未配置"。</p>
+     */
+    public static final String PLACEHOLDER_API_KEY = "sk-not-configured";
+
     /** 探测 Ollama 的超时时间，避免模型服务不可达时拖垮启动 */
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(3);
 
@@ -257,7 +265,7 @@ public class ChatClientRegistry {
     }
 
     private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return value != null && !value.isBlank() && !PLACEHOLDER_API_KEY.equals(value);
     }
 
     /**

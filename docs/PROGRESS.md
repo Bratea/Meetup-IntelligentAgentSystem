@@ -122,3 +122,18 @@
 - 本地 Docker 实测通过（Postgres + Ollama）：后端启动无告警，
   智能体 CRUD / 工具勾选 / SSE 错误路径 / 知识库状态流转 / pgvector 排序均正常，
   前端四个页面 Playwright 实测零报错。
+
+### P12 Docker 全栈验证与收尾 ✅
+
+- `docker compose build` 后端 / 前端镜像均构建成功。
+- `docker compose up -d` 四个容器全部 healthy：
+  - `xunwu-postgres`（PostgreSQL 17 + pgvector）
+  - `xunwu-ollama`
+  - `xunwu-backend`（`/api/health` → UP，database + ollama 均 UP）
+  - `xunwu-frontend`（nginx，首页 HTTP 200）
+- 经 nginx 反代实测 `/api/models`、`/api/agents`、`/api/knowledge/search`、
+  `/api/chat/stream` 全部正常。
+- 修复 Docker 环境下空串 API Key 导致 Spring AI 断言失败、后端无法启动的问题
+  （新增 `ApiKeyPlaceholderEnvironmentPostProcessor`）。
+- 修复前端容器 HEALTHCHECK 因 Alpine `localhost` 只解析 IPv6 而一直 unhealthy。
+- 前端 Playwright 走 80 端口实测对话 / 知识库上传 / 智能体页，零 console error。
