@@ -104,6 +104,8 @@ public class AgentExecutor {
         List<Message> messages = buildMessages(context);
         AtomicInteger step = new AtomicInteger(0);
         int maxSteps = context.getMaxSteps();
+        // 跨步保留最近一步的文本，用于达到最大步数时给用户一个交代
+        StringBuilder lastContent = new StringBuilder();
 
         while (step.incrementAndGet() <= maxSteps) {
             // 客户端断连后立即停止，避免继续消耗模型算力
@@ -117,8 +119,19 @@ public class AgentExecutor {
             StreamingOutcome outcome = callModelStreaming(context, messages, sink, step.get());
             String content = outcome.content();
             List<AssistantMessage.ToolCall> toolCalls = outcome.toolCalls();
+            if (content != null && !content.isBlank()) {
+                lastContent.setLength(0);
+                lastContent.append(content);
+            }
 
             if (toolCalls.isEmpty()) {
+                if (content == null || content.isBlank()) {
+                    // 模型偶尔会返回空补全（如被截断或服务端异常），
+                    // 此时若照发 done("")，前端会留下一个空气泡、库也会写入空历史。
+                    log.warn("模型第 {} 步返回空内容，转为错误事件", step.get());
+                    sink.next(AgentEvent.error("模型本次没有返回内容，请重试"));
+                    return;
+                }
                 sink.next(AgentEvent.done(content, step.get()));
                 return;
             }
@@ -139,7 +152,13 @@ public class AgentExecutor {
             messages.add(ToolResponseMessage.builder().responses(toolResponses).build());
         }
 
-        sink.next(AgentEvent.maxSteps(step.get()));
+        // 达到最大步数：有阶段性文本就作为 done 下发（同时落库），否则只报状态
+        if (lastContent.length() > 0) {
+            log.warn("达到最大步数 {}，下发已生成的部分内容", maxSteps);
+            sink.next(AgentEvent.done(lastContent.toString(), step.get()));
+        } else {
+            sink.next(AgentEvent.maxSteps(step.get()));
+        }
     }
 
     /**

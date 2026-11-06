@@ -382,6 +382,25 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
   返回 3 条 pgvector 余弦相似度结果（0.670 / 0.419 / 0.355，排序正确）→
   最终回答"文档分段默认大小为500字，重叠字数为50字。"
 
+### 36. ✅ 模型偶发空回复 → 空气泡 + 空历史
+
+实测出现一次：`done` 事件的 `data` 为空字符串，前端留下一个没有内容的助手气泡，
+数据库也写入了一条 `content=''` 的 assistant 消息，会污染后续上下文。
+
+- `AgentExecutor`：`toolCalls` 为空且 `content` 为空白时，不再发 `done("")`，
+  改发 `AgentEvent.error("模型本次没有返回内容，请重试")` 并 `log.warn` 记录步数。
+- `ChatService`：`done` 内容为空时跳过落库，避免历史里出现空气泡。
+
+### 37. ✅ 达到最大步数时丢失已生成内容
+
+原实现只有在某一步"没有 tool_calls"时才发 `done`。若智能体在工具循环里耗尽
+`maxSteps`，用户只会看到"已达最大执行步数"，前面已经流式出来的文字全部丢失，
+且数据库里没有任何 assistant 记录。
+
+- `AgentExecutor`：跨步用 `StringBuilder lastContent` 保留最近一步的非空文本；
+  达到 `maxSteps` 时若有内容则改发 `done(部分内容)`（前端照常展示、后端照常落库），
+  否则仍发 `maxSteps`。
+
 ---
 
 ## ✅ 已确认正常的部分

@@ -137,3 +137,28 @@
   （新增 `ApiKeyPlaceholderEnvironmentPostProcessor`）。
 - 修复前端容器 HEALTHCHECK 因 Alpine `localhost` 只解析 IPv6 而一直 unhealthy。
 - 前端 Playwright 走 80 端口实测对话 / 知识库上传 / 智能体页，零 console error。
+
+## P13. 端到端验证（Docker 全栈）
+
+**环境**：docker compose 全栈，Ollama 已装 `bge-m3` + `qwen2.5:7b`。
+
+**API 级验证（经 nginx:80）**
+
+| 场景 | 结果 |
+|---|---|
+| 创建智能体（含 toolIds 数组） | agent id=6，model=qwen2.5:7b，tools=["calculator","current_time"] |
+| 上传知识文档 | PROCESSING → READY，segments=1 |
+| RAG 自动注入问答 | "如何新增智能体？" → 正确复述知识库内容 |
+| 多工具同轮调用 | current_time + calculator 各一次，回答"今天是…计算结果是 972" |
+| 计算器 | `{"expression":"(128*46)"}` → `{"result":5888.0}` |
+| knowledge_search 固定工具 | 返回 3 条，相似度 0.670 / 0.419 / 0.355，排序正确 |
+
+**UI 级验证（Playwright + Chrome，经 nginx:80）**
+
+- 智能体 / 知识库 / 模型 / 工具 / 对话 五个页面全部渲染正常；
+- 控制台错误与 pageerror 均为 **0**；
+- 对话页工具调用卡片正确展示工具名、参数与返回值；
+- RAG 问答返回"知识库文档分段默认大小是 500 字。"；
+- 构建产物：JS 364.14 kB（gzip 120.52 kB）、CSS 19.01 kB（gzip 4.30 kB），零警告。
+
+**容器状态**：4 个容器全部 healthy；`/api/health` 返回 `database=UP, ollama=UP`。

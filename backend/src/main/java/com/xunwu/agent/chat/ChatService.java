@@ -114,6 +114,12 @@ public class ChatService {
                     if ("done".equals(event.getType())) {
                         Object data = event.getData();
                         String content = data == null ? "" : String.valueOf(data);
+                        // 空内容不入库：避免历史里出现空气泡，污染后续上下文
+                        if (content.isBlank()) {
+                            log.warn("对话结束但内容为空，跳过落库: conversationId={}",
+                                    finalConversationId);
+                            return;
+                        }
                         saveMessage(finalConversationId, "assistant",
                                 content, context.getModelId(), null);
                     }
