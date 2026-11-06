@@ -316,6 +316,16 @@ Ollama 返回 404 时 Spring AI 抛的是 `NonTransientAiException`，
 - `docker-compose.yml` 补注释说明空串会被后处理器改写。
 - `.env.example` 保持空值样例，用户复制后不会导致启动失败。
 
+### 32. ✅ Ollama 已安装模型判定：`/api/tags` 的 name 带 tag
+
+`refreshOllamaAvailability()` 用 `names.contains("bge-m3")` 判断，但 Ollama 返回的是
+`{"name":"bge-m3:latest"}`，导致 bge-m3 实际已安装却仍显示 `available=false`
+（`/api/models` 与前端模型下拉都拿不到它）。
+
+- 新增 `matchesInstalled(Set, modelId)`：完全相等直接命中；注册名不带 `:` 时，
+  任意 tag 都算命中。这样 `bge-m3` ↔ `bge-m3:latest`、`qwen2.5:7b` ↔ `qwen2.5:7b`
+  两种写法都能正确匹配。
+
 ---
 
 ## ✅ 已确认正常的部分
@@ -359,9 +369,10 @@ Ollama 返回 404 时 Spring AI 抛的是 `NonTransientAiException`，
 
 ## ⏳ 遗留 / 需在目标机器上验证
 
-1. **Docker 端到端**：本地 Docker 环境受限，未做完整 `docker compose up` 验证，
-   需在更强机器上执行 `docker compose up -d --build` 并跑通
-   「创建智能体 → 上传知识库 → 对话」全流程。
+1. ~~**Docker 端到端**：本地 Docker 环境受限，未做完整 `docker compose up` 验证~~
+   → 已完成（见上「Docker Compose 全栈实测」）。
 2. **`knowledge_segment.embedding` 维度**硬编码 `vector(1024)`，
    若更换 embedding 模型需同步修改 `02_schema.sql` 与 `xunwu.rag.embedding-dimensions`。
 3. **Ollama 模型需预先拉取**（`bge-m3` / `qwen2.5:7b`），脚本见 `deploy/ollama/pull-models.sh`。
+   本地网络对 `qwen2.5:7b` 的 Cloudflare R2 下载有重定向限制，
+   需在可直连的环境执行 `ollama pull`。

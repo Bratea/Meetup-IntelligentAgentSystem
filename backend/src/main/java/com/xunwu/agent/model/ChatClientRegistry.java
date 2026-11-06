@@ -188,13 +188,36 @@ public class ChatClientRegistry {
         installedOllamaModels = names;
         ModelInfo chat = modelInfos.get("qwen2.5:7b");
         if (chat != null) {
-            chat.setAvailable(names.contains("qwen2.5:7b"));
+            chat.setAvailable(matchesInstalled(names, "qwen2.5:7b"));
         }
         ModelInfo embedding = modelInfos.get("bge-m3");
         if (embedding != null) {
-            embedding.setAvailable(names.contains("bge-m3"));
+            embedding.setAvailable(matchesInstalled(names, "bge-m3"));
         }
         log.info("Ollama 已安装模型: {}", names);
+    }
+
+    /**
+     * 判断已安装列表里是否包含指定模型。
+     *
+     * <p>Ollama 的 {@code /api/tags} 返回的 name 带 tag（如 {@code bge-m3:latest}），
+     * 而注册名可能是裸名（{@code bge-m3}），也可能自带 tag（{@code qwen2.5:7b}），
+     * 所以：完全相等直接命中；注册名不带 tag 时，任意 tag 都算命中。</p>
+     */
+    private static boolean matchesInstalled(Set<String> installed, String modelId) {
+        if (installed.contains(modelId)) {
+            return true;
+        }
+        if (modelId.indexOf(':') >= 0) {
+            return false;
+        }
+        for (String name : installed) {
+            int colon = name.lastIndexOf(':');
+            if (colon > 0 && name.substring(0, colon).equals(modelId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 调用 Ollama /api/tags 获取已安装模型名，任何异常都降级为"未安装" */
