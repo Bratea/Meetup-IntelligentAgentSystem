@@ -352,6 +352,36 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
   "无法连接向量化服务，请确认 Ollama 已启动"，
   SSE 错误事件变为"无法连接模型服务，请确认 Ollama 已启动、网络可达"。
 
+### 35. ✅🔴 P0 工具调用 100% 失败（最严重）
+
+端到端实测发现：模型正确发出了 `tool_calling` 事件，但 `tool_result` 恒为
+`{"detail":"Conversion from JSON to java.lang.String failed"}`，
+即所有工具调用都拿不到结果，智能体最多只能"承认工具不可用"然后自己编答案。
+
+**根因**：`ToolRegistry` 用 Spring AI 的 `FunctionToolCallback` 注册工具，
+并设置 `.inputType(String.class)`。而 `FunctionToolCallback.call(String, ToolContext)`
+内部固定执行 `JsonParser.fromJson(toolInput, toolInputType)`（见
+`FunctionToolCallback` 字节码偏移 25-30）。模型给出的是 JSON **对象**
+（`{"expression":"128*46"}`），`fromJson(obj, String.class)` 必然抛
+`Conversion from JSON to java.lang.String failed`。
+`FunctionToolCallback.Builder.build()` 还 `Assert.notNull(inputType)`，
+所以也没法靠"不设置 inputType"绕过。
+
+**修复**：新增 `RawJsonToolCallback`，直接实现 `ToolCallback`，
+把模型给出的原始 JSON 串原样交给工具处理函数，不做框架层类型转换：
+
+- 工具侧签名保持 `BiFunction<String, ToolContext, String>`，三个内置工具零改动；
+- 附带好处：兼容个别把参数序列化成字符串的模型，不会反序列化失败；
+- `ToolRegistry` 去掉 `FunctionToolCallback` 与 `inputType(String.class)`。
+
+**实测**（qwen2.5:7b）：
+- `calculator`：模型发出 `{"expression":"(128*46)"}` →
+  `{"result":5888.0,"expression":"(128*46)"}` → 最终回答"计算结果是 5888.0。"
+- `knowledge_search`（FIXED 工具）：模型发出
+  `{"topK":4,"query":"《寻晚系统内部规范》 文档分段 默认大小 重叠字数"}` →
+  返回 3 条 pgvector 余弦相似度结果（0.670 / 0.419 / 0.355，排序正确）→
+  最终回答"文档分段默认大小为500字，重叠字数为50字。"
+
 ---
 
 ## ✅ 已确认正常的部分

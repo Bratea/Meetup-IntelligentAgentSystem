@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -38,11 +37,9 @@ public class ToolRegistry {
                 .description(description)
                 .inputSchema(inputSchema)
                 .build();
-        ToolCallback callback = FunctionToolCallback
-                .builder(name, (BiFunction<String, ToolContext, String>) handler)
-                .description(description)
-                .inputType(String.class)
-                .build();
+        // 用自定义 callback：Spring AI 的 FunctionToolCallback 强制做
+        // JsonParser.fromJson(args, inputType)，与本项目"工具自行解析 JSON"的设计冲突
+        ToolCallback callback = new RawJsonToolCallback(definition, handler);
         tools.put(name, new RegisteredTool(definition, callback, type, enabled));
         log.info("注册工具: name={}, type={}, enabled={}", name, type, enabled);
     }
