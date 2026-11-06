@@ -394,7 +394,7 @@ export default function ChatPage() {
           </select>
 
           <button
-            className={`btn btn--sm ${enableRag ? 'btn--ghost' : 'btn--sm'}`}
+            className={`btn btn--sm${enableRag ? ' btn--ghost' : ''}`}
             onClick={() => setEnableRag((v) => !v)}
             disabled={sending}
             title={enableRag ? '已启用知识库检索' : '未启用知识库检索'}
