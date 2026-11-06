@@ -1,9 +1,12 @@
 # 寻晤智能agent系统 — 自检问题清单
 
 > 首次检查：2025-11-05
-> 修复完成：2025-11-05（同日）
+> 修复完成：2025-11-06
 > 检查范围：后端 `backend/`、前端 `frontend/`、部署 `docker-compose.yml` / `Dockerfile` / `nginx.conf`
-> 验证方式：`mvn compile`、`npm run build`、JDK 21 运行时行为验证、Spring AI 1.1.0 字节码核对、Playwright 端到端验证
+> 验证方式：`mvn compile`、`npm run build`、JDK 21 运行时行为验证、Spring AI 1.1.0 字节码核对、
+> Docker 全栈端到端验证（API + Playwright UI）
+>
+> **总计 37 项，全部 ✅ 已修复**（P0 ×6、P1 ×10、P2 ×5、二轮 ×8、三轮 ×5、四轮 ×3）
 
 图例：✅ 已修复 ｜ ⏳ 已规避/降级处理 ｜ ➖ 确认无需处理
 
