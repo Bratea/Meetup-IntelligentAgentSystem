@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS knowledge_document (
     content       TEXT         NOT NULL,
     status        VARCHAR(16)  NOT NULL DEFAULT 'PROCESSING',  -- PROCESSING / READY / FAILED
     segment_count INT          NOT NULL DEFAULT 0,
+    error_message TEXT,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );

@@ -326,6 +326,32 @@ Ollama 返回 404 时 Spring AI 抛的是 `NonTransientAiException`，
   任意 tag 都算命中。这样 `bge-m3` ↔ `bge-m3:latest`、`qwen2.5:7b` ↔ `qwen2.5:7b`
   两种写法都能正确匹配。
 
+### 33. ✅ 知识库失败原因不可见
+
+文档处理失败时只把 `status` 置为 `FAILED`，前端只能看到一个没有下文的红色标签，
+用户无法判断是模型没装、Ollama 挂了还是内容有问题。
+
+- `knowledge_document` 新增 `error_message`（`02_schema.sql` + 幂等迁移
+  `03_migrations.sql`，已存在的库也能补列）。
+- `KnowledgeService.markFailed()` 把原因落库（截断 500 字）。
+- 列表接口一并返回 `error_message`，前端在 FAILED 时展示红色原因块。
+
+### 34. ✅ 连接类故障被误判为"系统繁忙"
+
+Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连接拒绝拿到的是
+`java.nio.channels.ClosedChannelException`，既不是 `ConnectException` 也不是
+`UnknownHostException`，于是走到兜底分支，用户看到"向量化服务调用失败，请稍后重试"
+或"系统繁忙"，没有任何可操作的信息。
+
+- 新增 `ThrowableUtils`：`isConnectionFailure()` 覆盖
+  `ConnectException` / `UnknownHostException` / `ClosedChannelException` /
+  `SocketException` / `HttpConnectTimeoutException` / `ResourceAccessException`，
+  并辅以连接关键字正则（connection refused/reset/closed/timed out）。
+- `EmbeddingService` 与 `AgentExecutor` 统一改用它。
+- 实测：Ollama 不可达时文档失败原因变为
+  "无法连接向量化服务，请确认 Ollama 已启动"，
+  SSE 错误事件变为"无法连接模型服务，请确认 Ollama 已启动、网络可达"。
+
 ---
 
 ## ✅ 已确认正常的部分

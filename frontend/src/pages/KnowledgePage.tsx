@@ -232,6 +232,9 @@ export default function KnowledgePage() {
                   {doc.createdAt && ` · 创建于 ${formatTime(doc.createdAt)}`}
                 </div>
                 <div className="knowledge__doc-preview">{doc.contentPreview ?? ''}</div>
+                {doc.status === 'FAILED' && doc.errorMessage && (
+                  <div className="knowledge__doc-error">失败原因：{doc.errorMessage}</div>
+                )}
               </div>
               <button className="btn btn--sm btn--danger" onClick={() => handleDelete(doc.id)}>
                 删除

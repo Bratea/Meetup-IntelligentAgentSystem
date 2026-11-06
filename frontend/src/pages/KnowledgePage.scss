@@ -104,4 +104,15 @@
     word-break: break-word;
     line-height: 1.7;
   }
+
+  &__doc-error {
+    margin-top: $space-sm;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
+    background: rgba($color-danger, 0.12);
+    color: $color-danger;
+    font-size: $font-size-sm;
+    line-height: 1.6;
+    word-break: break-word;
+  }
 }

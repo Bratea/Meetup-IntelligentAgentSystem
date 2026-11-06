@@ -9,18 +9,20 @@
         <result column="content" property="content"/>
         <result column="status" property="status"/>
         <result column="segment_count" property="segmentCount"/>
+        <result column="error_message" property="errorMessage"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, name, content, status, segment_count, created_at, updated_at
+        id, name, content, status, segment_count, error_message, created_at, updated_at
     </sql>
 
     <insert id="insert" parameterType="com.xunwu.agent.entity.KnowledgeDocument"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO knowledge_document (name, content, status, segment_count, created_at, updated_at)
-        VALUES (#{name}, #{content}, #{status}, #{segmentCount}, now(), now())
+        INSERT INTO knowledge_document
+            (name, content, status, segment_count, error_message, created_at, updated_at)
+        VALUES (#{name}, #{content}, #{status}, #{segmentCount}, #{errorMessage}, now(), now())
     </insert>
 
     <update id="update" parameterType="com.xunwu.agent.entity.KnowledgeDocument">
@@ -30,6 +32,7 @@
             <if test="content != null">content = #{content},</if>
             <if test="status != null">status = #{status},</if>
             <if test="segmentCount != null">segment_count = #{segmentCount},</if>
+            <if test="errorMessage != null">error_message = #{errorMessage},</if>
             updated_at = now()
         </set>
         WHERE id = #{id}
@@ -53,6 +56,7 @@
         <result column="content_preview" property="contentPreview"/>
         <result column="status" property="status"/>
         <result column="segment_count" property="segmentCount"/>
+        <result column="error_message" property="errorMessage"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
@@ -60,7 +64,7 @@
     <!-- 列表接口不返回正文，避免为了一行预览传输整篇文档 -->
     <select id="selectSummaryList" resultMap="SummaryResultMap">
         SELECT id, name, LEFT(content, 200) AS content_preview,
-               status, segment_count, created_at, updated_at
+               status, segment_count, error_message, created_at, updated_at
         FROM knowledge_document
         ORDER BY updated_at DESC
     </select>

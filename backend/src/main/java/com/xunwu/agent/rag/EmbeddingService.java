@@ -1,6 +1,7 @@
 package com.xunwu.agent.rag;
 
 import com.xunwu.agent.common.BizException;
+import com.xunwu.agent.common.ThrowableUtils;
 import com.xunwu.agent.config.XunwuProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -9,7 +10,6 @@ import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import java.net.ConnectException;
 import java.util.List;
 
 /**
@@ -80,11 +80,10 @@ public class EmbeddingService {
                     "向量化失败（HTTP " + status + "），请稍后重试");
         }
 
-        Throwable root = rootCause(e);
-        if (root instanceof ConnectException || root instanceof java.net.UnknownHostException) {
+        if (ThrowableUtils.isConnectionFailure(e)) {
             return BizException.serviceUnavailable("无法连接向量化服务，请确认 Ollama 已启动");
         }
-        log.warn("向量化失败: {}", root.toString());
+        log.warn("向量化失败: {}", ThrowableUtils.rootCause(e));
         return BizException.serviceUnavailable("向量化服务调用失败，请稍后重试");
     }
 
@@ -105,14 +104,6 @@ public class EmbeddingService {
             current = current.getCause();
         }
         return 0;
-    }
-
-    private Throwable rootCause(Throwable e) {
-        Throwable current = e;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current;
     }
 
     /**

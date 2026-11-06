@@ -125,7 +125,12 @@ public class KnowledgeService {
      */
     private void markFailed(Long documentId, String reason) {
         log.warn("文档处理失败: documentId={}, reason={}", documentId, reason);
-        transactionTemplate.executeWithoutResult(status -> updateStatus(documentId, "FAILED"));
+        KnowledgeDocument update = new KnowledgeDocument();
+        update.setId(documentId);
+        update.setStatus("FAILED");
+        // 失败原因落库，前端直接展示，避免用户只看到一个没有下文的 FAILED
+        update.setErrorMessage(reason.length() > 500 ? reason.substring(0, 500) : reason);
+        transactionTemplate.executeWithoutResult(status -> documentMapper.update(update));
     }
 
     private void updateStatus(Long documentId, String status) {

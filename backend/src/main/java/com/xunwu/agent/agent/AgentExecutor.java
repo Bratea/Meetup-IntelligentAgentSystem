@@ -1,5 +1,6 @@
 package com.xunwu.agent.agent;
 
+import com.xunwu.agent.common.ThrowableUtils;
 import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.KnowledgeSearchResult;
 import com.xunwu.agent.rag.KnowledgeSearchService;
@@ -305,8 +306,7 @@ public class AgentExecutor {
             }
             return "模型调用失败（HTTP " + status + "），请稍后重试。";
         }
-        if (cause instanceof java.net.ConnectException
-                || cause instanceof java.net.UnknownHostException) {
+        if (ThrowableUtils.isConnectionFailure(cause)) {
             return "无法连接模型服务，请确认 Ollama 已启动、网络可达。";
         }
         if (cause instanceof java.util.concurrent.TimeoutException) {

@@ -13,6 +13,8 @@ export interface KnowledgeDocument {
   content?: string
   status: 'PROCESSING' | 'READY' | 'FAILED' | string
   segmentCount: number
+  /** 处理失败原因，仅 status=FAILED 时有值 */
+  errorMessage?: string
   createdAt?: string
   updatedAt?: string
 }

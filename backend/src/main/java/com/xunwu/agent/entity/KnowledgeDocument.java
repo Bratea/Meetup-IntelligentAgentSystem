@@ -32,6 +32,9 @@ public class KnowledgeDocument {
     /** 分段数量 */
     private Integer segmentCount;
 
+    /** 处理失败原因（仅 status=FAILED 时有值） */
+    private String errorMessage;
+
     /** 创建时间 */
     private OffsetDateTime createdAt;
 
