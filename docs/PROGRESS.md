@@ -443,3 +443,12 @@ java.lang.IllegalStateException: Multiple tools with the same name (knowledge_se
 - 前端 `npm run build`：通过。
 - CI YAML 经解析校验：触发器 `push` / `pull_request` → `main`，
   job 结构 `backend` / `frontend` 正确。
+- 端到端实测：`POST /api/conversations` 传不存在的 agentId 返回 404
+  （修复前会触发外键约束异常），传正常 agentId 返回 200；
+  LongCat-2.5 带 RAG 问答正确引用知识库内容（pgvector），
+  事件序列 thinking / token / done 正常。
+- 构建备注（Windows）：应用运行时执行 `mvn package` 会因 jar 被占用
+  导致 `repackage` 的 rename 失败（报 PluginExecutionException），
+  留下未重打包的 thin jar。打包前先停掉运行中的实例。
+  校验产物大小时用 `stat -c %s`，不要用 `ls -l | awk '{print $5}'`
+  （Git Bash 下该列不是字节数）。

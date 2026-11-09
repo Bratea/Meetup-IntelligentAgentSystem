@@ -567,3 +567,5 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 
 **复验**：后端 `mvn test` 137 通过 / 0 失败（新增 `GlobalExceptionHandlerTest` 2 个、`ConversationControllerTest` +1）；
 前端 `npm run build` 通过；CI YAML 解析校验通过。
+端到端实测：`POST /api/conversations` 传不存在的 agentId 返回 404（修复前触发约束异常），
+传正常 agentId 返回 200；LongCat-2.5 带 RAG 问答正确引用知识库（pgvector），事件序列 thinking / token / done 正常。
