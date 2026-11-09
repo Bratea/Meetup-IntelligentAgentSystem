@@ -553,3 +553,17 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 **复验**：后端 `mvn test` 134 通过 / 0 失败（新增 `AgentToolServiceTest` 4 个，删除 `resolveToolNames` 对应用例 1 个）；
 前端 `npm run build` 通过；实测普通对话、RAG 问答正常，
 智能体配置不存在工具时被静默过滤、对话正常完成（不 500）。
+
+---
+
+## 第十轮：关联校验、异常兜底与 CI（P21）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P21-1 | `WebConfig` 的 MVC 异步超时设成 600_000（10 分钟），与单步模型调用超时相同；而一次对话会跑多步、每步各一次模型调用，多步对话会先被 MVC 挡断 | 提升到 1_800_000（30 分钟）作为整条 SSE 流的上限 |
+| P21-2 | `ConversationController.create` 只校验 `agentId` 非空，不校验智能体是否存在；`conversation.agent_id` 是 NOT NULL 外键，直接插库会触发约束异常 | 注入 `AgentMapper`，创建前校验，不存在返回 404 |
+| P21-3 | `GlobalExceptionHandler` 未处理 `DataIntegrityViolationException`，所有外键 / 非空 / 唯一约束冲突都掉进兜底分支变 500，客户端无法知道是自己的参数问题 | 新增处理器返回 400 + 可读文案，原始信息只进日志 |
+| P21-4 | 仓库有 137 个单元测试但没有任何 CI：push / PR 后无法自动验证，回归只能靠本地手跑 | 新增 `.github/workflows/ci.yml`：后端跑 `mvn test`、前端跑 `npm ci` + `npm run build`（含 `tsc -b`），带 concurrency 取消旧任务 |
+
+**复验**：后端 `mvn test` 137 通过 / 0 失败（新增 `GlobalExceptionHandlerTest` 2 个、`ConversationControllerTest` +1）；
+前端 `npm run build` 通过；CI YAML 解析校验通过。

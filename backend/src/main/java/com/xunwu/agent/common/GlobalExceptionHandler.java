@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import jakarta.validation.ConstraintViolationException;
 
@@ -70,6 +71,19 @@ public class GlobalExceptionHandler {
         log.warn("缺少请求参数: {}", e.getParameterName());
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, "缺少请求参数: " + e.getParameterName()));
+    }
+
+    /**
+     * 数据约束冲突（外键 / 非空 / 唯一约束）。
+     *
+     * <p>多数是客户端传了不存在的关联 id（如给不存在的 agentId 建会话）。
+     * 不单独处理会掉进 {@code Exception} 分支变 500，且客户端无法知道是自己的参数问题。</p>
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("数据约束冲突: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(400, "数据约束冲突：引用的关联数据不存在或状态不允许"));
     }
 
     @ExceptionHandler(Exception.class)

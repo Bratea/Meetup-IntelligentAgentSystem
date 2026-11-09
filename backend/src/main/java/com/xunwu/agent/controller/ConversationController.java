@@ -3,6 +3,7 @@ package com.xunwu.agent.controller;
 import com.xunwu.agent.common.ApiResponse;
 import com.xunwu.agent.common.BizException;
 import com.xunwu.agent.entity.Conversation;
+import com.xunwu.agent.mapper.AgentMapper;
 import com.xunwu.agent.mapper.ConversationMapper;
 import lombok.Data;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +22,12 @@ public class ConversationController {
     private static final int MAX_TITLE_LENGTH = 255;
 
     private final ConversationMapper conversationMapper;
+    private final AgentMapper agentMapper;
 
-    public ConversationController(ConversationMapper conversationMapper) {
+    public ConversationController(ConversationMapper conversationMapper,
+                                  AgentMapper agentMapper) {
         this.conversationMapper = conversationMapper;
+        this.agentMapper = agentMapper;
     }
 
     /** 会话列表 */
@@ -50,6 +54,11 @@ public class ConversationController {
     public ApiResponse<Conversation> create(@RequestBody ConversationRequest request) {
         if (request.getAgentId() == null) {
             throw BizException.badRequest("agentId 不能为空");
+        }
+        // conversation.agent_id 是 NOT NULL 外键：不校验会直接触发约束异常，
+        // 由全局异常处理器兑底成 400，客户端无法知道是自己的 agentId 写错了
+        if (agentMapper.selectById(request.getAgentId()) == null) {
+            throw BizException.notFound("智能体不存在: " + request.getAgentId());
         }
         Conversation conversation = new Conversation();
         conversation.setAgentId(request.getAgentId());

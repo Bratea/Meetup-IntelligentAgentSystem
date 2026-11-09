@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新提交直接取消旧任务，省 runner 配额
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端测试 (Java 21 / Maven)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 运行单元测试
+        working-directory: backend
+        run: mvn -s .mvn/settings.xml test
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/target/surefire-reports/*.txt
+          retention-days: 7
+
+  frontend:
+    name: 前端构建 (Node 22 / Vite)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci
+
+      - name: 类型检查 + 构建
+        working-directory: frontend
+        run: npm run build
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7

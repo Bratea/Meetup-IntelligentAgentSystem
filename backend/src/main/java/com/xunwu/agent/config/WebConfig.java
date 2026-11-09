@@ -36,13 +36,12 @@ public class WebConfig implements WebMvcConfigurer {
      * <p>不配的话 Spring MVC 会用 {@code SimpleAsyncTaskExecutor}：
      * 每个请求新建线程、不复用、不限制并发，生产环境存在线程爆炸风险。</p>
      *
-     * <p>超时必须大于 {@code AgentExecutor.MODEL_TIMEOUT}（10 分钟），
-     * 否则流式响应会先被 MVC 掐断。</p>
+     * <p>超时是<b>整条 SSE 流</b>的上限，而一次对话会跑多步、每步各有一次模型调用（单次调用上限 10 分钟）。若按单步时长设成 10 分钟，多步对话会被 MVC 提前截断。这里取 30 分钟作为整体上限：足够覆盖多步对话，同时避免异常情况下异步任务无限期挂住（客户端断连仍由 {@code FluxSink.onCancel} 提前结束）。</p>
      */
     @Override
     public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
         configurer.setTaskExecutor(mvcAsyncExecutor);
-        configurer.setDefaultTimeout(600_000L);
+        configurer.setDefaultTimeout(1_800_000L);
     }
 
     @Override

@@ -1,7 +1,9 @@
 package com.xunwu.agent.controller;
 
 import com.xunwu.agent.common.GlobalExceptionHandler;
+import com.xunwu.agent.entity.Agent;
 import com.xunwu.agent.entity.Conversation;
+import com.xunwu.agent.mapper.AgentMapper;
 import com.xunwu.agent.mapper.ConversationMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -29,13 +32,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ConversationControllerTest {
 
     private ConversationMapper mapper;
+    private AgentMapper agentMapper;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mapper = mock(ConversationMapper.class);
+        agentMapper = mock(AgentMapper.class);
+        // 默认智能体存在；具体用例可覆盖为 null
+        when(agentMapper.selectById(anyLong())).thenReturn(new Agent());
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ConversationController(mapper))
+                .standaloneSetup(new ConversationController(mapper, agentMapper))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -78,6 +85,20 @@ class ConversationControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
+        verify(mapper, never()).insert(any());
+    }
+
+    @Test
+    void create_unknownAgentId_returns404() throws Exception {
+        when(agentMapper.selectById(404L)).thenReturn(null);
+
+        mockMvc.perform(post("/api/conversations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"agentId\":404,\"title\":\"x\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404));
+
+        // 不能直接插库：conversation.agent_id 是 NOT NULL 外键，会触发约束异常
         verify(mapper, never()).insert(any());
     }
 

@@ -397,3 +397,49 @@ java.lang.IllegalStateException: Multiple tools with the same name (knowledge_se
 - 实测：普通对话与 RAG 问答正常；
   构造带不存在工具（`not_exist_tool`）的智能体，对话正常完成并返回 `done`，
   未出现 500。
+
+## P21：关联校验、异常兜底与 CI
+
+**发现**
+
+1. `WebConfig` 把 MVC 异步超时设成 `600_000`（10 分钟），与
+   `AgentExecutor.MODEL_TIMEOUT` 相同。但一次对话会跑多步、
+   每步各有一次模型调用，整条 SSE 流的实际时长是「步数 × 单步时长」。
+   超时与单步时长相等时，多步对话会先被 MVC 挡断，
+   表现是「聊着聊着连接就断了」，且日志里看不到业务异常。
+
+2. `ConversationController.create` 只校验 `agentId` 非空，
+   不校验智能体是否存在。`conversation.agent_id` 是 NOT NULL 外键，
+   传一个不存在的 id 会直接触发约束异常，
+   在补上 P21-3 之前表现为 500。
+
+3. `GlobalExceptionHandler` 没有处理 `DataIntegrityViolationException`：
+   所有外键 / 非空 / 唯一约束冲突都掉进兜底的 `Exception` 分支变 500，
+   客户端拿到「系统繁忙」，无法知道是自己的参数写错了。
+
+4. 仓库已有 137 个单元测试，但没有任何 CI。
+   push / PR 之后无法自动验证，回归只能靠本地手跑，
+   前端类型错误与后端测试失败都可能在合并后才被发现。
+
+**修复**
+
+- `WebConfig`：MVC 异步超时提升到 `1_800_000`（30 分钟），
+  作为整条 SSE 流的上限。足够覆盖多步对话，
+  同时避免异常情况下异步任务无限期挂住
+  （客户端断连仍由 `FluxSink.onCancel` 提前结束）。
+- `ConversationController`：注入 `AgentMapper`，
+  创建前校验智能体存在，不存在返回 404。
+- `GlobalExceptionHandler`：新增 `DataIntegrityViolationException` 处理器，
+  返回 400 + 可读文案，原始信息只进日志。
+- 新增 `.github/workflows/ci.yml`：
+  后端 job 跑 `mvn -s .mvn/settings.xml test` 并上传 surefire 报告；
+  前端 job 跑 `npm ci` + `npm run build`（含 `tsc -b` 类型检查）并上传产物；
+  带 `concurrency` 组，新提交直接取消同分支的旧任务。
+
+**验证**
+
+- 后端 `mvn test`：**137 通过 / 0 失败 / 0 错误**
+  （新增 `GlobalExceptionHandlerTest` 2 个、`ConversationControllerTest` +1）。
+- 前端 `npm run build`：通过。
+- CI YAML 经解析校验：触发器 `push` / `pull_request` → `main`，
+  job 结构 `backend` / `frontend` 正确。
