@@ -218,6 +218,8 @@ public class KnowledgeService {
         KnowledgeDocument update = new KnowledgeDocument();
         update.setId(documentId);
         update.setStatus(status);
+        // 状态一旦离开 FAILED，清掉上一次的失败原因，避免接口向调用方残留过时信息
+        update.setErrorMessage("");
         documentMapper.update(update);
     }
 

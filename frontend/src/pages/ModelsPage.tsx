@@ -8,6 +8,7 @@ const providerMeta: Record<string, { icon: string; label: string }> = {
   deepseek: { icon: '🌊', label: 'DeepSeek' },
   zhipu: { icon: '✨', label: '智谱 GLM' },
   ollama: { icon: '🦙', label: 'Ollama 本地' },
+  longcat: { icon: '🐱', label: 'LongCat' },
 }
 
 export default function ModelsPage() {

@@ -60,7 +60,6 @@ export default function KnowledgePage() {
   useEffect(() => {
     const hasProcessing = documents.some((d) => d.status === 'PROCESSING')
     if (hasProcessing && pollTimerRef.current === null && pollCountRef.current < MAX_POLLS) {
-      pollCountRef.current += 1
       pollTimerRef.current = window.setInterval(() => {
         pollCountRef.current += 1
         if (pollCountRef.current >= MAX_POLLS) {

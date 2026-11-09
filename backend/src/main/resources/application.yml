@@ -53,6 +53,13 @@ spring:
         options:
           model: bge-m3
 
+# LongCat（OpenAI 兼容协议）
+# ChatClientRegistry 用 OpenAiChatModel 手工构造；未配置 api-key 时模型标记为不可用
+longcat:
+  base-url: ${LONGCAT_BASE_URL:https://api.longcat.chat/openai/v1}
+  api-key: ${LONGCAT_API_KEY:}
+  model: ${LONGCAT_MODEL:LongCat-2.5}
+
 mybatis:
   mapper-locations: classpath*:mapper/**/*.xml
   type-aliases-package: com.xunwu.agent.entity

@@ -117,6 +117,16 @@ public class ChatService {
             conversation.setStatus("ACTIVE");
             conversationMapper.insert(conversation);
             conversationId = conversation.getId();
+        } else {
+            // 前端可能携带已删除 / 伪造的 conversationId，若不校验会直接触发外键约束异常；
+            // 同时避免把消息写进别的智能体会话里。
+            Conversation existing = conversationMapper.selectById(conversationId);
+            if (existing == null) {
+                throw BizException.notFound("会话不存在: " + conversationId);
+            }
+            if (!existing.getAgentId().equals(agent.getId())) {
+                throw BizException.badRequest("该会话不属于当前智能体");
+            }
         }
 
         // 3. 保存用户消息

@@ -227,12 +227,16 @@ export default function ChatPage() {
         }
         case 'tool_result': {
           const payload = event.data as { name: string; result: string }
-          updateLastAssistant((msg) => ({
-            ...msg,
-            toolEvents: (msg.toolEvents ?? []).map((t) =>
-              t.name === payload.name ? { ...t, result: payload.result } : t,
-            ),
-          }))
+          updateLastAssistant((msg) => {
+            const toolEvents = [...(msg.toolEvents ?? [])]
+            // 后端按调用顺序下发 tool_result，按「第一个还没有结果」的条目匹配；
+            // 同名工具在同一轮被重复调用时，按名字匹配会把结果写到错误的条目上。
+            const idx = toolEvents.findIndex((t) => t.result === undefined)
+            if (idx >= 0) {
+              toolEvents[idx] = { ...toolEvents[idx], result: payload.result }
+            }
+            return { ...msg, toolEvents }
+          })
           setStatus(`工具 ${payload.name} 返回结果`)
           break
         }

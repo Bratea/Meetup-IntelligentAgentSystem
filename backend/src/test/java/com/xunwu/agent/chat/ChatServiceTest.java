@@ -162,6 +162,7 @@ class ChatServiceTest {
     @Test
     void stream_existingConversation_reusesItWithoutCreating() {
         when(agentMapper.selectById(1L)).thenReturn(agent(1L, "qwen2.5:7b"));
+        when(conversationMapper.selectById(55L)).thenReturn(conversation(55L, 1L));
         givenExecution(AgentEvent.done("收到", 1));
 
         AgentRequest request = request(1L, "继续");
@@ -384,6 +385,7 @@ class ChatServiceTest {
     @Test
     void stream_contextCarriesPromptToolsAndHistory() {
         when(agentMapper.selectById(1L)).thenReturn(agent(1L, "qwen2.5:7b"));
+        when(conversationMapper.selectById(5L)).thenReturn(conversation(5L, 1L));
         when(messageMapper.selectByConversationId(5L)).thenReturn(List.of(
                 message(1L, "user", "旧问题"),
                 message(2L, "assistant", "旧回答"),
@@ -403,6 +405,41 @@ class ChatServiceTest {
         // tool 角色消息必须被过滤，避免污染模型上下文
         assertEquals(2, context.getHistory().size());
         assertEquals("新问题", context.getUserMessage());
+    }
+
+    @Test
+    void stream_conversationNotFound_emitsErrorEvent() {
+        when(agentMapper.selectById(1L)).thenReturn(agent(1L, "qwen2.5:7b"));
+        when(conversationMapper.selectById(55L)).thenReturn(null);
+
+        AgentRequest request = request(1L, "你好");
+        request.setConversationId(55L);
+
+        List<AgentEvent> events = collect(service.stream(request));
+
+        assertEquals(1, events.size());
+        assertEquals("error", events.get(0).getType());
+        assertTrue(String.valueOf(events.get(0).getData()).contains("会话不存在"));
+        // 不能把消息写进不存在的会话（否则触发外键约束异常）
+        verify(messageMapper, never()).insert(any());
+        verifyNoInteractions(agentExecutor);
+    }
+
+    @Test
+    void stream_conversationBelongsToAnotherAgent_emitsErrorEvent() {
+        when(agentMapper.selectById(1L)).thenReturn(agent(1L, "qwen2.5:7b"));
+        when(conversationMapper.selectById(55L)).thenReturn(conversation(55L, 99L));
+
+        AgentRequest request = request(1L, "你好");
+        request.setConversationId(55L);
+
+        List<AgentEvent> events = collect(service.stream(request));
+
+        assertEquals(1, events.size());
+        assertEquals("error", events.get(0).getType());
+        assertTrue(String.valueOf(events.get(0).getData()).contains("不属于当前智能体"));
+        verify(messageMapper, never()).insert(any());
+        verifyNoInteractions(agentExecutor);
     }
 
     private AgentRequest request(Long agentId, String message) {

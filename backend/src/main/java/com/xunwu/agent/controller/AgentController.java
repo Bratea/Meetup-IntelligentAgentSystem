@@ -99,6 +99,10 @@ public class AgentController {
         } else if (isCreate) {
             throw BizException.badRequest("智能体名称不能为空");
         }
+        // name 列是 VARCHAR(128)，超长会触发 DB 约束异常，提前拦成 400
+        if (agent.getName() != null && agent.getName().length() > 128) {
+            throw BizException.badRequest("智能体名称不能超过 128 个字符");
+        }
         if (request.getDescription() != null) {
             agent.setDescription(trimToNull(request.getDescription()));
         }

@@ -139,6 +139,7 @@ public class KnowledgeController {
     /** 知识库检索测试 */
     @PostMapping("/search")
     public ApiResponse<List<KnowledgeSearchResult>> search(@RequestBody SearchRequest request) {
+        validateQuery(request.getQuery());
         int topK = normalizeTopK(request.getTopK());
         return ApiResponse.ok(knowledgeSearchService.search(request.getQuery(), topK));
     }
@@ -146,10 +147,21 @@ public class KnowledgeController {
     /** 将检索结果组装为上下文 */
     @PostMapping("/search/context")
     public ApiResponse<String> searchContext(@RequestBody SearchRequest request) {
+        validateQuery(request.getQuery());
         int topK = normalizeTopK(request.getTopK());
         List<KnowledgeSearchResult> results =
                 knowledgeSearchService.search(request.getQuery(), topK);
         return ApiResponse.ok(knowledgeSearchService.buildContext(results));
+    }
+
+    /**
+     * 检索词不能为空：否则 {@code embeddingService.embed(null)} 会直接抛异常，
+     * 由全局异常处理器兜底成 500，错误信息也不可读。
+     */
+    private void validateQuery(String query) {
+        if (query == null || query.isBlank()) {
+            throw BizException.badRequest("查询内容不能为空");
+        }
     }
 
     private int normalizeTopK(Integer topK) {

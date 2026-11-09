@@ -220,3 +220,71 @@
 
 - 后端 `mvn test`（JDK 21）：**98 通过 / 0 失败 / 0 错误**。
 - 前端 `npm run build`：通过，产物 JS 661.05 kB（gzip 210.49 kB）、CSS 25.83 kB（gzip 5.39 kB）。
+
+### P16 健壮性加固与端到端复验 ✅
+
+**后端**
+
+- `AgentExecutor`：客户端断连时**真正中断**模型调用。原实现只在循环 / 工具执行 /
+  token 回调里检查 `sink.isCancelled()`，但 `blockLast` 仍会空等整个模型响应
+  （最坏 10 分钟），持续消耗本地算力。改为 `Sinks.One` 取消信号 +
+  `takeUntilOther` + `CountDownLatch`：`FluxSink.onCancel` 触发后，
+  正在进行的流式调用立即中断。
+- `AgentExecutor`：修正达到最大步数时事件里的步数（原来多报 1 步）。
+- `AgentExecutor`：模型超时由底层 `IllegalStateException` 改为受检异常包装，
+  由 `toUserMessage` 统一翻译成「模型响应超时，请稍后重试或减小输入长度」。
+- `ChatService.doStream`：校验 `conversationId` 是否存在、是否属于当前智能体。
+  原实现直接落库，伪造 / 已删除的 id 会触发外键约束异常（500），
+  跨智能体的 id 则会静默把消息写进别人的会话。
+- `KnowledgeController`：`search` / `searchContext` 校验查询词非空，
+  避免 `embeddingService.embed(null)` 抛异常兜底成 500。
+- `AgentController`：`name` 长度上限 128（与 `VARCHAR(128)` 对齐），超长返回 400。
+
+**前端**
+
+- `ChatPage`：`tool_result` 按「第一个还没有结果」的条目匹配，不再按工具名匹配。
+  同一轮重复调用同名工具时，原实现会把结果写到错误的条目上。
+- `KnowledgePage`：修复轮询计数被加两次导致提前停止的问题
+  （`setInterval` 前误增一次，实际轮询时长减半）。
+
+**验证**
+
+- 后端 `mvn test`（JDK 21）：**113 通过 / 0 失败 / 0 错误**
+  （新增 `AgentControllerTest` 10 个、`ChatServiceTest` +2、`KnowledgeControllerTest` +3）。
+- 前端 `npm run build`：通过，产物 JS 661.08 kB（gzip 210.51 kB）、CSS 25.83 kB（gzip 5.39 kB）。
+- 本地全链路实测（PostgreSQL 17 + pgvector / Ollama bge-m3 + qwen2.5:7b）：
+  文档上传 → 向量化 → 检索命中（相似度 0.594）、普通对话、工具调用（`current_time`）、
+  RAG 注入问答、重新生成（旧回复被替换）、消息落库、断连取消全部正常。
+
+---
+
+## P17：模型扩展与语义修正
+
+**后端**
+
+- `ChatClientRegistry`：新增 LongCat（OpenAI 兼容协议）模型接入。
+  Spring AI 自动配置只创建一个 `OpenAiChatModel`（已被 DeepSeek 占用），
+  因此手工构造独立实例；未配置 `LONGCAT_API_KEY` 时只登记元信息并标记不可用，
+  不影响其他模型。配置项 `longcat.base-url` / `longcat.api-key` / `longcat.model`
+  均支持环境变量覆盖。
+- `AgentExecutor.toUserMessage`：兜底分支不再把底层异常 message 回给客户端
+  （可能含地址、连接串等内部信息），细节只留日志。
+- `KnowledgeService.updateStatus`：状态离开 FAILED 时清空 `error_message`，
+  避免接口向调用方残留过时的失败原因。
+- `ChatClientRegistry.resolveModelId`：未知模型改为抛异常，不再静默回退默认模型。
+- `ChatClientRegistry.contains`：改为纯查询语义，未知模型返回 false。
+- `ChatClientRegistry`：`bge-m3` 不再标记为 `defaultModel`（它是向量模型，
+  模型页本就会出现两个「默认」徽章）。
+
+**前端**
+
+- `ModelsPage`：`providerMeta` 补充 LongCat 图标与名称。
+
+**验证**
+
+- 后端 `mvn test`：**118 通过 / 0 失败 / 0 错误**（新增 `ChatClientRegistryTest` 5 个）。
+- 前端 `npm run build`：通过，产物 JS 661.12 kB（gzip 210.53 kB）、CSS 25.83 kB（gzip 5.39 kB）。
+- 本地实测（带 `LONGCAT_API_KEY` 启动）：`/api/models` 正确显示 LongCat 可用；
+  LongCat 普通对话、RAG 问答（正确引用知识库内容）、工具调用均正常；
+  未知模型返回 `未注册的模型: nope，可用模型: [...]` 错误事件；
+  空模型回退默认模型正常。

@@ -19,14 +19,20 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Agent 执行引擎
@@ -76,13 +82,19 @@ public class AgentExecutor {
      * 流式执行：通过 FluxSink 推送 token 与工具事件
      */
     public Flux<AgentEvent> executeStream(AgentContext context) {
+        // 客户端断连信号：onCancel 时发一个值，模型调用的 takeUntilOther 会据此立即终止
+        Sinks.One<Boolean> cancelSignal = Sinks.one();
         // Flux.create + BUFFER：sink 在订阅时创建，且缓冲无上限，
         // 不会出现"订阅前事件被丢弃"或"客户端慢导致溢出"的问题。
         return Flux.create(emitter -> {
+            emitter.onCancel(() -> {
+                log.info("客户端已断连，Agent 提前终止");
+                cancelSignal.tryEmitValue(Boolean.TRUE);
+            });
             // 在托管线程池中执行，避免阻塞响应线程，也避免裸线程无法回收
             agentTaskExecutor.execute(() -> {
                 try {
-                    runStream(context, emitter);
+                    runStream(context, emitter, cancelSignal.asMono());
                     emitter.complete();
                 } catch (Exception e) {
                     log.error("Agent 流式执行异常", e);
@@ -98,7 +110,8 @@ public class AgentExecutor {
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    private void runStream(AgentContext context, FluxSink<AgentEvent> sink) {
+    private void runStream(AgentContext context, FluxSink<AgentEvent> sink,
+                           Mono<Boolean> cancelSignal) {
         loadKnowledge(context);
 
         List<Message> messages = buildMessages(context);
@@ -116,7 +129,11 @@ public class AgentExecutor {
             sink.next(AgentEvent.thinking(step.get()));
 
             // 一次调用：边收 token 边推送，同时聚合 tool_calls
-            StreamingOutcome outcome = callModelStreaming(context, messages, sink, step.get());
+            StreamingOutcome outcome = callModelStreaming(context, messages, sink, step.get(), cancelSignal);
+            if (sink.isCancelled()) {
+                log.info("客户端已断连，Agent 提前终止");
+                return;
+            }
             String content = outcome.content();
             List<AssistantMessage.ToolCall> toolCalls = outcome.toolCalls();
             if (content != null && !content.isBlank()) {
@@ -155,9 +172,9 @@ public class AgentExecutor {
         // 达到最大步数：有阶段性文本就作为 done 下发（同时落库），否则只报状态
         if (lastContent.length() > 0) {
             log.warn("达到最大步数 {}，下发已生成的部分内容", maxSteps);
-            sink.next(AgentEvent.done(lastContent.toString(), step.get()));
+            sink.next(AgentEvent.done(lastContent.toString(), maxSteps));
         } else {
-            sink.next(AgentEvent.maxSteps(step.get()));
+            sink.next(AgentEvent.maxSteps(maxSteps));
         }
     }
 
@@ -169,7 +186,8 @@ public class AgentExecutor {
      * 优先取信息更完整的一份即可。</p>
      */
     private StreamingOutcome callModelStreaming(AgentContext context, List<Message> messages,
-                                                FluxSink<AgentEvent> sink, int step) {
+                                                FluxSink<AgentEvent> sink, int step,
+                                                Mono<Boolean> cancelSignal) {
         ChatOptions chatOptions = buildChatOptions(context);
 
         StringBuilder content = new StringBuilder();
@@ -181,28 +199,50 @@ public class AgentExecutor {
                 .stream()
                 .chatResponse();
 
+        // 用 CountDownLatch 等待流式调用结束，以便客户端断连时能立即 dispose，
+        // 不再像 blockLast 那样空等整个模型响应。
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+
         responseFlux
-                .doOnNext(chunk -> {
-                    if (sink.isCancelled()) {
-                        return;
-                    }
-                    if (chunk.getResult() == null || chunk.getResult().getOutput() == null) {
-                        return;
-                    }
-                    AssistantMessage output = chunk.getResult().getOutput();
+                .takeUntilOther(cancelSignal)
+                .subscribe(
+                        chunk -> {
+                            if (sink.isCancelled()) {
+                                return;
+                            }
+                            if (chunk.getResult() == null || chunk.getResult().getOutput() == null) {
+                                return;
+                            }
+                            AssistantMessage output = chunk.getResult().getOutput();
 
-                    String delta = output.getText();
-                    if (delta != null && !delta.isEmpty()) {
-                        content.append(delta);
-                        sink.next(AgentEvent.token(delta, step));
-                    }
+                            String delta = output.getText();
+                            if (delta != null && !delta.isEmpty()) {
+                                content.append(delta);
+                                sink.next(AgentEvent.token(delta, step));
+                            }
 
-                    List<AssistantMessage.ToolCall> calls = output.getToolCalls();
-                    if (calls != null && !calls.isEmpty()) {
-                        mergeToolCalls(mergedToolCalls, calls);
-                    }
-                })
-                .blockLast(MODEL_TIMEOUT);
+                            List<AssistantMessage.ToolCall> calls = output.getToolCalls();
+                            if (calls != null && !calls.isEmpty()) {
+                                mergeToolCalls(mergedToolCalls, calls);
+                            }
+                        },
+                        error::set,
+                        latch::countDown
+                );
+
+        try {
+            if (!latch.await(MODEL_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                // TimeoutException 是受检异常，包装后由 toUserMessage 统一翻译成可读提示
+                throw new IllegalStateException(new TimeoutException("模型响应超时"));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("模型调用被中断", e);
+        }
+        if (error.get() != null) {
+            throw new IllegalStateException(error.get());
+        }
 
         // 用同一次生成的内容构造 assistant 消息，保证历史与用户所见一致
         AssistantMessage assistantMessage = AssistantMessage.builder()
@@ -331,6 +371,8 @@ public class AgentExecutor {
         if (cause instanceof java.util.concurrent.TimeoutException) {
             return "模型响应超时，请稍后重试或减小输入长度。";
         }
-        return "模型调用失败：" + cause.getMessage();
+        // 未知异常：底层 message 可能含地址、连接串等内部信息，只留日志不回客户端
+        log.warn("模型调用失败（未分类）: {}", cause.toString());
+        return "模型调用失败，请稍后重试";
     }
 }

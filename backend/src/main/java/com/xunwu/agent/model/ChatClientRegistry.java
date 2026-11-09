@@ -6,6 +6,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.zhipuai.ZhiPuAiChatModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,6 +79,16 @@ public class ChatClientRegistry {
     @Value("${spring.ai.ollama.base-url:http://localhost:11434}")
     private String ollamaBaseUrl;
 
+    /** LongCat（OpenAI 兼容协议），配置见 application.yml 的 longcat 段 */
+    @Value("${longcat.api-key:}")
+    private String longcatApiKey;
+
+    @Value("${longcat.base-url:https://api.longcat.chat/openai/v1}")
+    private String longcatBaseUrl;
+
+    @Value("${longcat.model:LongCat-2.5}")
+    private String longcatModel;
+
     private final HttpClient ollamaProbeClient = HttpClient.newBuilder()
             .connectTimeout(PROBE_TIMEOUT)
             .build();
@@ -100,6 +112,7 @@ public class ChatClientRegistry {
         registerDeepSeek();
         registerZhiPu();
         registerOllama();
+        registerLongcat();
         log.info("ChatClientRegistry 初始化完成，已注册 {} 个模型: {}", chatClients.size(), chatClients.keySet());
     }
 
@@ -167,9 +180,48 @@ public class ChatClientRegistry {
         // 注意：available 只是"乐观值"，真实结果由 listModels() 探测后刷新。
         ModelInfo embedding = ModelInfo.of("bge-m3", "BGE-M3 向量模型", "ollama", "embedding",
                 "Ollama 本地向量化模型（1024 维）");
-        embedding.setDefaultModel(true);
         modelInfos.put("bge-m3", embedding);
         log.info("已注册 Ollama 本地模型，baseUrl={}", ollamaBaseUrl);
+    }
+
+    /**
+     * 注册 LongCat（OpenAI 兼容协议）。
+     *
+     * <p>LongCat 与 DeepSeek 同为 OpenAI 兼容协议，但 Spring AI 自动配置只创建一个
+     * {@link OpenAiChatModel}（已被 DeepSeek 占用），因此这里手工构造一个独立实例。
+     * 未配置 {@code LONGCAT_API_KEY} 时只登记元信息并标记不可用，不影响其他模型。</p>
+     */
+    private void registerLongcat() {
+        if (!hasText(longcatApiKey)) {
+            log.info("未配置 LONGCAT_API_KEY，LongCat 模型不可用");
+            setUnavailable(longcatModel, "LongCat 2.5", "longcat", "chat",
+                    "LongCat 对话模型（OpenAI 兼容协议）");
+            return;
+        }
+        try {
+            OpenAiApi api = OpenAiApi.builder()
+                    .baseUrl(longcatBaseUrl)
+                    .apiKey(longcatApiKey)
+                    .completionsPath("/chat/completions")
+                    .build();
+            OpenAiChatModel chatModel = OpenAiChatModel.builder()
+                    .openAiApi(api)
+                    .defaultOptions(OpenAiChatOptions.builder()
+                            .model(longcatModel)
+                            .temperature(0.7)
+                            .build())
+                    .build();
+            chatClients.put(longcatModel, ChatClient.builder(chatModel).build());
+            ModelInfo info = ModelInfo.of(longcatModel, "LongCat 2.5", "longcat", "chat",
+                    "LongCat 对话模型（OpenAI 兼容协议）");
+            info.setAvailable(true);
+            modelInfos.put(longcatModel, info);
+            log.info("已注册 LongCat 模型，baseUrl={}，model={}", longcatBaseUrl, longcatModel);
+        } catch (Exception e) {
+            log.warn("LongCat 模型注册失败: {}", e.getMessage());
+            setUnavailable(longcatModel, "LongCat 2.5", "longcat", "chat",
+                    "LongCat 对话模型（OpenAI 兼容协议）");
+        }
     }
 
     /**
@@ -263,10 +315,13 @@ public class ChatClientRegistry {
     }
 
     /**
-     * 判断模型是否已注册
+     * 判断模型是否已注册（纯查询：未知模型返回 false，不抛异常）
      */
     public boolean contains(String modelId) {
-        return chatClients.containsKey(resolveModelId(modelId));
+        if (modelId == null || modelId.isBlank()) {
+            return false;
+        }
+        return chatClients.containsKey(modelId);
     }
 
     /**
@@ -292,14 +347,20 @@ public class ChatClientRegistry {
     }
 
     /**
-     * 解析模型标识：空值/未知值回退到默认模型
+     * 解析模型标识。
+     *
+     * <p>空值回退到 {@code xunwu.agent.default-model}；显式传入但未注册的模型直接抛异常 ——
+     * 静默替换会让调用方以为在用 A 模型，实际却走了默认模型，出问题时极难排查。</p>
      */
     public String resolveModelId(String modelId) {
         if (modelId == null || modelId.isBlank()) {
             return properties.getAgent().getDefaultModel();
         }
-        // 兼容 "qwen2.5" -> "qwen2.5:7b" 等简写
-        return chatClients.containsKey(modelId) ? modelId : properties.getAgent().getDefaultModel();
+        if (chatClients.containsKey(modelId)) {
+            return modelId;
+        }
+        throw new IllegalArgumentException(
+                "未注册的模型: " + modelId + "，可用模型: " + chatClients.keySet());
     }
 
     /**

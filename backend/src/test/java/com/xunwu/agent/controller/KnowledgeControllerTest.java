@@ -280,4 +280,37 @@ class KnowledgeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("组装后的上下文"));
     }
+
+    @Test
+    void search_blankQuery_returns400() throws Exception {
+        mockMvc.perform(post("/api/knowledge/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("查询内容不能为空"));
+
+        verifyNoInteractions(searchService);
+    }
+
+    @Test
+    void search_nullQuery_returns400() throws Exception {
+        mockMvc.perform(post("/api/knowledge/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topK\":3}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("查询内容不能为空"));
+
+        verifyNoInteractions(searchService);
+    }
+
+    @Test
+    void searchContext_blankQuery_returns400() throws Exception {
+        mockMvc.perform(post("/api/knowledge/search/context")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("查询内容不能为空"));
+
+        verifyNoInteractions(searchService);
+    }
 }

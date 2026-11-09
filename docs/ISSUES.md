@@ -474,3 +474,38 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 - 前端 `npm run build` 通过（1160 modules，JS 661.05 kB / CSS 25.83 kB）。
 - 修复编辑已停用智能体时 `status` 被硬编码回 `ACTIVE` 的问题：
   `AgentsPage` 表单补上 `status` 字段并回显。
+
+---
+
+## 第五轮：健壮性加固（P16）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P16-1 | 客户端断连后 `blockLast` 仍空等整个模型响应，最坏 10 分钟，持续消耗算力 | `Sinks.One` + `takeUntilOther` + `CountDownLatch`，`onCancel` 触发即中断 |
+| P16-2 | 达到最大步数时 `done` / `max_steps` 事件里的步数多报 1 | 统一用 `maxSteps` 而非 `step.get()` |
+| P16-3 | 模型超时抛出底层 `IllegalStateException`，提示不可读 | 包装为 `TimeoutException`，由 `toUserMessage` 翻译 |
+| P16-4 | 伪造 / 跨智能体的 `conversationId` 会触发外键约束 500，或静默写进别人的会话 | `ChatService` 校验会话存在性与归属 |
+| P16-5 | 空查询词直接调 `embeddingService.embed(null)`，由全局异常兜底成 500 | `KnowledgeController` 校验非空，返回 400 |
+| P16-6 | 智能体名称超长触发 DB 约束异常 | 对齐 `VARCHAR(128)`，提前返回 400 |
+| P16-7 | 同一轮重复调用同名工具时，`tool_result` 按名字匹配会写错条目 | 改为按「第一个还没有结果」的条目匹配 |
+| P16-8 | 知识库轮询计数被加两次，实际轮询时长减半 | 去掉 `setInterval` 前的一次自增 |
+
+**复验**：后端 `mvn test` 113 通过 / 0 失败；前端 `npm run build` 通过；
+本地 PostgreSQL + Ollama 全链路实测（上传 / 向量化 / 检索 / 对话 / 工具 / RAG / 重新生成）全部正常。
+
+---
+
+## 第六轮：模型扩展与语义修正（P17）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P17-1 | 仅支持 DeepSeek / 智谱 / Ollama，无法接入 LongCat 等 OpenAI 兼容协议模型 | `ChatClientRegistry.registerLongcat()` 手工构造独立 `OpenAiChatModel`（自动配置的实例已被 DeepSeek 占用）；未配置 Key 时只登记元信息并标记不可用 |
+| P17-2 | `AgentExecutor.toUserMessage` 兜底分支把底层异常 message 直接回给客户端，与类注释「不泄露堆栈、连接串」相矛盾 | 未知异常只记日志，对外统一返回「模型调用失败，请稍后重试」 |
+| P17-3 | 文档从 FAILED 重新处理成功后，旧的 `error_message` 仍留在库里 | `updateStatus` 在状态离开 FAILED 时清空失败原因 |
+| P17-4 | 显式传入未注册的模型会被静默替换成默认模型，调用方以为在用 A 实际走了 B | `resolveModelId` 对未知模型抛 `IllegalArgumentException`，由 `ChatService` 转成 400 |
+| P17-5 | `bge-m3`（向量模型）被标为 `defaultModel`，模型页出现两个「默认」徽章 | 去掉该标记；向量模型本就不参与对话默认模型选择 |
+| P17-6 | `contains()` 内部走 `resolveModelId()`，未知模型会抛异常，与「纯查询」语义不符 | 改为直接查表，未知返回 false |
+
+**复验**：后端 `mvn test` 118 通过 / 0 失败（新增 `ChatClientRegistryTest` 5 个）；
+前端 `npm run build` 通过；带 `LONGCAT_API_KEY` 启动后 `/api/models` 显示 LongCat 可用，
+普通对话 / RAG 问答 / 工具调用实测正常，未知模型返回明确错误事件。
