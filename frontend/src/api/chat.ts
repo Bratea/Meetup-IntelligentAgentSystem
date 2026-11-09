@@ -31,34 +31,31 @@ export interface StreamChatParams {
   enableRag?: boolean
 }
 
+export interface RegenerateParams {
+  conversationId: number
+  modelId?: string
+  enableRag?: boolean
+}
+
+export interface StreamCallbacks {
+  onEvent: (event: AgentEvent) => void
+  onError?: (error: Error) => void
+  onComplete?: () => void
+}
+
 /**
- * 通过 fetch stream 建立 SSE 连接（EventSource 不支持 POST，故使用 fetch）
+ * 建立 SSE 连接并消费事件流。
+ *
+ * <p>EventSource 不支持 POST 与自定义 header，因此统一用 fetch stream 读取。</p>
  */
-export async function streamChat(
-  params: StreamChatParams,
-  callbacks: {
-    onEvent: (event: AgentEvent) => void
-    onError?: (error: Error) => void
-    onComplete?: () => void
-  },
+async function consumeSseStream(
+  url: string,
+  callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  const query = new URLSearchParams()
-  query.set('agentId', String(params.agentId))
-  if (params.conversationId) {
-    query.set('conversationId', String(params.conversationId))
-  }
-  if (params.modelId) {
-    query.set('modelId', params.modelId)
-  }
-  if (params.enableRag === false) {
-    query.set('enableRag', 'false')
-  }
-  query.set('message', params.message)
-
   let response: Response
   try {
-    response = await fetch(`${API_BASE}/chat/stream?${query.toString()}`, {
+    response = await fetch(url, {
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal,
@@ -113,11 +110,56 @@ export async function streamChat(
   }
 }
 
+/** 发送消息并流式接收回复 */
+export async function streamChat(
+  params: StreamChatParams,
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const query = new URLSearchParams()
+  query.set('agentId', String(params.agentId))
+  if (params.conversationId) {
+    query.set('conversationId', String(params.conversationId))
+  }
+  if (params.modelId) {
+    query.set('modelId', params.modelId)
+  }
+  if (params.enableRag === false) {
+    query.set('enableRag', 'false')
+  }
+  query.set('message', params.message)
+
+  await consumeSseStream(
+    `${API_BASE}/chat/stream?${query.toString()}`,
+    callbacks,
+    signal,
+  )
+}
+
+/** 以会话内最后一条用户消息为输入重新生成回复 */
+export async function streamRegenerate(
+  params: RegenerateParams,
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const query = new URLSearchParams()
+  query.set('conversationId', String(params.conversationId))
+  if (params.modelId) {
+    query.set('modelId', params.modelId)
+  }
+  if (params.enableRag === false) {
+    query.set('enableRag', 'false')
+  }
+
+  await consumeSseStream(
+    `${API_BASE}/chat/regenerate?${query.toString()}`,
+    callbacks,
+    signal,
+  )
+}
+
 /** 解析单个 SSE 事件块，取出 data 字段并回调 */
-function dispatch(raw: string, callbacks: {
-  onEvent: (event: AgentEvent) => void
-  onError?: (error: Error) => void
-}): void {
+function dispatch(raw: string, callbacks: StreamCallbacks): void {
   const lines = raw.split(/\r?\n/)
   let dataLine = ''
   for (const line of lines) {

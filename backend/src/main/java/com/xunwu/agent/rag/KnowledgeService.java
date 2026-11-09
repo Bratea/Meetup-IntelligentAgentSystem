@@ -1,8 +1,10 @@
 package com.xunwu.agent.rag;
 
+import com.xunwu.agent.common.BizException;
 import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.KnowledgeDocument;
 import com.xunwu.agent.entity.KnowledgeSegment;
+import com.xunwu.agent.entity.KnowledgeSegmentInfo;
 import com.xunwu.agent.mapper.KnowledgeDocumentMapper;
 import com.xunwu.agent.mapper.KnowledgeSegmentMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 知识库服务：文档入库、分段、向量化
@@ -117,6 +120,84 @@ public class KnowledgeService {
             segmentMapper.deleteByDocumentId(documentId);
             documentMapper.deleteById(documentId);
         });
+    }
+
+    /**
+     * 查询文档的分段明细（不含完整向量）。
+     */
+    public List<KnowledgeSegmentInfo> listSegments(Long documentId) {
+        KnowledgeDocument document = documentMapper.selectById(documentId);
+        if (document == null) {
+            throw BizException.notFound("文档不存在: " + documentId);
+        }
+        return segmentMapper.selectByDocumentId(documentId).stream()
+                .map(this::toSegmentInfo)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 重新向量化整个文档：清空旧分段、状态置回 PROCESSING。
+     *
+     * <p>仅做「重置」这一步（同步、快速返回）；真正的向量化由上层提交到线程池异步执行，
+     * 避免阻塞 HTTP 请求。</p>
+     */
+    public void reprocessDocument(Long documentId) {
+        KnowledgeDocument document = documentMapper.selectById(documentId);
+        if (document == null) {
+            throw BizException.notFound("文档不存在: " + documentId);
+        }
+        transactionTemplate.executeWithoutResult(status -> {
+            segmentMapper.deleteByDocumentId(documentId);
+            documentMapper.updateSegmentCount(documentId, 0);
+            updateStatus(documentId, "PROCESSING");
+        });
+        log.info("文档已重置为待处理: documentId={}", documentId);
+    }
+
+    /**
+     * 删除单个分段，并同步文档的分段计数。
+     */
+    public void deleteSegment(Long segmentId) {
+        KnowledgeSegment segment = segmentMapper.selectById(segmentId);
+        if (segment == null) {
+            throw BizException.notFound("分段不存在: " + segmentId);
+        }
+        transactionTemplate.executeWithoutResult(status -> {
+            segmentMapper.deleteById(segmentId);
+            long count = segmentMapper.countByDocumentId(segment.getDocumentId());
+            documentMapper.updateSegmentCount(segment.getDocumentId(), (int) count);
+        });
+        log.info("分段已删除: segmentId={}, documentId={}", segmentId, segment.getDocumentId());
+    }
+
+    /**
+     * 编辑分段内容并重新向量化。
+     */
+    public void updateSegment(Long segmentId, String content) {
+        if (content == null || content.isBlank()) {
+            throw BizException.badRequest("分段内容不能为空");
+        }
+        KnowledgeSegment segment = segmentMapper.selectById(segmentId);
+        if (segment == null) {
+            throw BizException.notFound("分段不存在: " + segmentId);
+        }
+        // 重新向量化（远程 HTTP，放在事务外）
+        float[] vector = embeddingService.embed(content);
+        segmentMapper.updateContent(segmentId, content, EmbeddingService.toVectorString(vector));
+        log.info("分段已更新并重新向量化: segmentId={}, documentId={}",
+                segmentId, segment.getDocumentId());
+    }
+
+    private KnowledgeSegmentInfo toSegmentInfo(KnowledgeSegment segment) {
+        KnowledgeSegmentInfo info = new KnowledgeSegmentInfo();
+        info.setId(segment.getId());
+        info.setDocumentId(segment.getDocumentId());
+        info.setChunkIndex(segment.getChunkIndex());
+        info.setContent(segment.getContent());
+        info.setHasEmbedding(segment.getEmbedding() != null
+                && !segment.getEmbedding().isBlank());
+        info.setCreatedAt(segment.getCreatedAt());
+        return info;
     }
 
     /**

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { knowledgeApi, type KnowledgeDocument, type KnowledgeSearchResult } from '../api/knowledge'
+import {
+  knowledgeApi,
+  type KnowledgeDocument,
+  type KnowledgeSearchResult,
+  type KnowledgeSegment,
+} from '../api/knowledge'
 import { usePageIntro } from '../hooks/gsap'
 import '../styles/main.scss'
 import './KnowledgePage.scss'
@@ -16,6 +21,15 @@ export default function KnowledgePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<KnowledgeSearchResult[]>([])
   const [searching, setSearching] = useState(false)
+
+  // 分段明细
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [segments, setSegments] = useState<KnowledgeSegment[]>([])
+  const [segmentsLoading, setSegmentsLoading] = useState(false)
+  const [editingSegmentId, setEditingSegmentId] = useState<number | null>(null)
+  const [editingSegmentContent, setEditingSegmentContent] = useState('')
+  const [reprocessingId, setReprocessingId] = useState<number | null>(null)
+  const [actionError, setActionError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +101,10 @@ export default function KnowledgePage() {
     if (!window.confirm('确认删除该文档及其所有分段？')) return
     try {
       await knowledgeApi.delete(id)
+      if (expandedId === id) {
+        setExpandedId(null)
+        setSegments([])
+      }
       await load()
     } catch (err) {
       setError((err as Error).message)
@@ -107,6 +125,88 @@ export default function KnowledgePage() {
       setSearching(false)
     }
   }
+
+  /** 展开 / 收起分段明细 */
+  const toggleSegments = useCallback(async (doc: KnowledgeDocument) => {
+    if (expandedId === doc.id) {
+      setExpandedId(null)
+      setSegments([])
+      return
+    }
+    setExpandedId(doc.id)
+    setSegmentsLoading(true)
+    setActionError('')
+    try {
+      const list = await knowledgeApi.listSegments(doc.id)
+      setSegments(list)
+    } catch (err) {
+      setActionError((err as Error).message)
+      setSegments([])
+    } finally {
+      setSegmentsLoading(false)
+    }
+  }, [expandedId])
+
+  /** 重新向量化整个文档 */
+  const handleReprocess = useCallback(async (id: number) => {
+    setReprocessingId(id)
+    setActionError('')
+    try {
+      await knowledgeApi.reprocess(id)
+      pollCountRef.current = 0
+      await load()
+      // 刷新已展开的分段
+      if (expandedId === id) {
+        const list = await knowledgeApi.listSegments(id)
+        setSegments(list)
+      }
+    } catch (err) {
+      setActionError((err as Error).message)
+    } finally {
+      setReprocessingId(null)
+    }
+  }, [expandedId, load])
+
+  const startEditSegment = useCallback((segment: KnowledgeSegment) => {
+    setEditingSegmentId(segment.id)
+    setEditingSegmentContent(segment.content)
+  }, [])
+
+  /** 保存分段内容并重新向量化 */
+  const commitEditSegment = useCallback(async () => {
+    if (editingSegmentId == null) return
+    const text = editingSegmentContent.trim()
+    if (!text) {
+      setEditingSegmentId(null)
+      return
+    }
+    setActionError('')
+    try {
+      await knowledgeApi.updateSegment(editingSegmentId, text)
+      setEditingSegmentId(null)
+      if (expandedId != null) {
+        const list = await knowledgeApi.listSegments(expandedId)
+        setSegments(list)
+      }
+    } catch (err) {
+      setActionError((err as Error).message)
+    }
+  }, [editingSegmentId, editingSegmentContent, expandedId])
+
+  const handleDeleteSegment = useCallback(async (id: number) => {
+    if (!window.confirm('确认删除该分段？')) return
+    setActionError('')
+    try {
+      await knowledgeApi.deleteSegment(id)
+      if (expandedId != null) {
+        const list = await knowledgeApi.listSegments(expandedId)
+        setSegments(list)
+      }
+      await load()
+    } catch (err) {
+      setActionError((err as Error).message)
+    }
+  }, [expandedId, load])
 
   const formatTime = (value?: string) => {
     if (!value) return ''
@@ -234,6 +334,98 @@ export default function KnowledgePage() {
                 <div className="knowledge__doc-preview">{doc.contentPreview ?? ''}</div>
                 {doc.status === 'FAILED' && doc.errorMessage && (
                   <div className="knowledge__doc-error">失败原因：{doc.errorMessage}</div>
+                )}
+
+                <div className="knowledge__doc-actions">
+                  <button
+                    className="btn btn--sm"
+                    onClick={() => void toggleSegments(doc)}
+                    disabled={segmentsLoading}
+                  >
+                    {expandedId === doc.id ? '收起分段' : '分段明细'}
+                  </button>
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    onClick={() => void handleReprocess(doc.id)}
+                    disabled={reprocessingId === doc.id}
+                    title="清除旧向量并重新分段、重新向量化"
+                  >
+                    {reprocessingId === doc.id ? '处理中…' : '重新向量化'}
+                  </button>
+                </div>
+
+                {actionError && expandedId === doc.id && (
+                  <div className="knowledge__doc-error">{actionError}</div>
+                )}
+
+                {expandedId === doc.id && (
+                  <div className="knowledge__segments">
+                    {segmentsLoading && (
+                      <div className="knowledge__segments-loading">加载分段中…</div>
+                    )}
+                    {!segmentsLoading && segments.length === 0 && (
+                      <div className="knowledge__segments-empty">
+                        暂无分段，文档可能仍在处理中
+                      </div>
+                    )}
+                    {segments.map((seg) => (
+                      <div key={seg.id} className="knowledge__segment">
+                        <div className="knowledge__segment-head">
+                          <span className="knowledge__segment-index">
+                            分段 #{seg.chunkIndex}
+                          </span>
+                          {seg.hasEmbedding ? (
+                            <span className="badge badge--success">已向量化</span>
+                          ) : (
+                            <span className="badge badge--warning">未向量化</span>
+                          )}
+                        </div>
+
+                        {editingSegmentId === seg.id ? (
+                          <>
+                            <textarea
+                              className="textarea knowledge__segment-edit"
+                              value={editingSegmentContent}
+                              onChange={(e) => setEditingSegmentContent(e.target.value)}
+                              autoFocus
+                            />
+                            <div className="knowledge__segment-actions">
+                              <button
+                                className="btn btn--sm btn--primary"
+                                onClick={() => void commitEditSegment()}
+                              >
+                                保存并重新向量化
+                              </button>
+                              <button
+                                className="btn btn--sm"
+                                onClick={() => setEditingSegmentId(null)}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="knowledge__segment-content">{seg.content}</div>
+                            <div className="knowledge__segment-actions">
+                              <button
+                                className="btn btn--sm"
+                                onClick={() => startEditSegment(seg)}
+                              >
+                                编辑
+                              </button>
+                              <button
+                                className="btn btn--sm btn--danger"
+                                onClick={() => void handleDeleteSegment(seg.id)}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
               <button className="btn btn--sm btn--danger" onClick={() => handleDelete(doc.id)}>

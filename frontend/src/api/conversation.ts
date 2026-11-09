@@ -29,6 +29,12 @@ export const conversationApi = {
   get: (id: number) => request<Conversation>(`/conversations/${id}`),
   create: (data: Partial<Conversation>) =>
     request<Conversation>('/conversations', { method: 'POST', body: JSON.stringify(data) }),
+  /** 更新会话（改名 / 归档），只提交需要变更的字段 */
+  update: (id: number, data: { title?: string; status?: string }) =>
+    request<Conversation>(`/conversations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   delete: (id: number) => request<void>(`/conversations/${id}`, { method: 'DELETE' }),
 }
 

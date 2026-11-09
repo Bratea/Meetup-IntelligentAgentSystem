@@ -13,6 +13,7 @@ const emptyForm = {
   modelId: '',
   toolIds: [] as string[],
   maxSteps: 8,
+  status: 'ACTIVE',
 }
 
 /** 数据库里 toolIds 存的是 JSON 字符串，编辑时解析成数组 */
@@ -76,7 +77,7 @@ export default function AgentsPage() {
         modelId: form.modelId || models[0]?.id || '',
         toolIds: form.toolIds,
         maxSteps: form.maxSteps,
-        status: 'ACTIVE',
+        status: form.status,
       }
       if (editingId) {
         await agentApi.update(editingId, payload)
@@ -102,7 +103,19 @@ export default function AgentsPage() {
       modelId: agent.modelId,
       toolIds: parseToolIds(agent.toolIds),
       maxSteps: agent.maxSteps,
+      status: agent.status || 'ACTIVE',
     })
+  }
+
+  /** 启用 / 停用：停用的智能体不再出现在对话页的可选列表里 */
+  const handleToggleStatus = async (agent: Agent) => {
+    const next = agent.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    try {
+      await agentApi.update(agent.id, { status: next })
+      await load()
+    } catch (err) {
+      setError((err as Error).message)
+    }
   }
 
   const handleDelete = async (id: number) => {
@@ -189,6 +202,17 @@ export default function AgentsPage() {
                     setForm({ ...form, maxSteps: Number(e.target.value) })
                   }
                 />
+              </div>
+              <div className="field">
+                <label className="field__label">状态</label>
+                <select
+                  className="select"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="ACTIVE">启用</option>
+                  <option value="INACTIVE">停用</option>
+                </select>
               </div>
               <div className="field">
                 <label className="field__label">描述</label>
@@ -289,6 +313,17 @@ export default function AgentsPage() {
               <div className="agents__item-actions">
                 <button className="btn btn--sm" onClick={() => handleEdit(agent)}>
                   编辑
+                </button>
+                <button
+                  className="btn btn--sm"
+                  onClick={() => void handleToggleStatus(agent)}
+                  title={
+                    agent.status === 'ACTIVE'
+                      ? '停用后不再出现在对话页的可选列表'
+                      : '重新启用该智能体'
+                  }
+                >
+                  {agent.status === 'ACTIVE' ? '停用' : '启用'}
                 </button>
                 <button className="btn btn--sm btn--danger" onClick={() => handleDelete(agent.id)}>
                   删除

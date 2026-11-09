@@ -343,3 +343,265 @@
     transform: translateY(0);
   }
 }
+
+// ==================== 会话选择器 ====================
+.chat__picker {
+  position: relative;
+
+  &-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 190px;
+    padding: 8px 12px;
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    background: $color-bg-soft;
+    color: $color-text;
+    font-size: $font-size-sm;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color $transition-fast, box-shadow $transition-fast;
+
+    &:hover {
+      border-color: $color-border-strong;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &-title {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    @include ellipsis;
+  }
+
+  &-caret {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: $color-text-dim;
+    transition: transform $transition-fast;
+
+    &.is-open {
+      transform: rotate(180deg);
+    }
+  }
+
+  &-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 300px;
+    max-height: 380px;
+    display: flex;
+    flex-direction: column;
+    background: $color-bg-card;
+    border: 1px solid $color-border-strong;
+    border-radius: $radius;
+    box-shadow: $shadow-lg;
+    z-index: 30;
+    overflow: hidden;
+    animation: picker-in 0.16s ease;
+  }
+
+  &-new {
+    padding: 10px 14px;
+    border: none;
+    border-bottom: 1px solid $color-border;
+    background: transparent;
+    color: $color-primary;
+    font-size: $font-size-sm;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background $transition-fast;
+
+    &:hover {
+      background: $color-primary-soft;
+    }
+  }
+
+  &-list {
+    overflow-y: auto;
+    @include scrollbar(6px);
+  }
+
+  &-empty {
+    padding: $space-lg;
+    text-align: center;
+    color: $color-text-muted;
+    font-size: $font-size-sm;
+  }
+
+  &-item {
+    display: flex;
+    align-items: center;
+    gap: $space-xs;
+    padding: 6px 8px 6px 12px;
+    border-left: 2px solid transparent;
+    transition: background $transition-fast, border-color $transition-fast;
+
+    &:hover {
+      background: $color-bg-soft;
+
+      .chat__picker-item-actions {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+
+    &.is-active {
+      background: $color-primary-soft;
+      border-left-color: $color-primary;
+
+      .chat__picker-item-actions {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+  }
+
+  // 触屏设备没有 hover，操作按钮常驻
+  @media (hover: none) {
+    &-item-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  &-item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: $color-text;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  &-item-title {
+    font-size: $font-size-sm;
+    @include ellipsis;
+  }
+
+  &-item-time {
+    flex-shrink: 0;
+    font-size: $font-size-xs;
+    color: $color-text-muted;
+  }
+
+  // 标题行下方的元信息：归档标记 + 时间
+  &-item-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &-item-badge {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: $radius-pill;
+    background: rgba(91, 140, 255, 0.14);
+    color: $color-primary;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+
+  &-item-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity $transition-fast;
+  }
+
+  &-icon {
+    padding: 3px 5px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background $transition-fast, transform $transition-fast;
+
+    &:hover {
+      background: $color-bg-elevated;
+      transform: scale(1.1);
+    }
+
+    &--danger:hover {
+      background: $color-danger-soft;
+    }
+  }
+
+  &-rename {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 9px;
+    font-size: $font-size-sm;
+  }
+}
+
+@keyframes picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// ==================== 消息操作栏 ====================
+.message__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-sm;
+  margin-top: $space-sm;
+}
+
+.message__action {
+  padding: 3px 9px;
+  border-radius: $radius-sm;
+  border: 1px solid $color-border;
+  background: transparent;
+  color: $color-text-muted;
+  font-size: $font-size-xs;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color $transition-fast, border-color $transition-fast,
+    background $transition-fast;
+
+  &:hover:not(:disabled) {
+    color: $color-primary;
+    border-color: $color-primary;
+    background: $color-primary-soft;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.is-active {
+    color: $color-success;
+    border-color: $color-success;
+    background: $color-success-soft;
+  }
+}
+
+.message__markdown {
+  min-height: 1em;
+}

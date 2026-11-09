@@ -17,6 +17,7 @@
 | P8 | 前端：Vite + TS + SCSS 脚手架、聊天页（SSE 实时渲染） | ✅ 完成 | 见下方提交 |
 | P9 | 前端：智能体/知识库/模型/工具管理页 + GSAP 动画 | ✅ 完成 | 见下方提交 |
 | P10 | 部署配置（Dockerfile / nginx / compose）、README 收尾 | ✅ 完成 | 见下方提交 |
+| P14 | 接口加固 + 单测补齐 + 前端 Markdown/会话管理升级 | ✅ 完成 | 见下方提交 |
 
 ## 详细记录
 
@@ -162,3 +163,60 @@
 - 构建产物：JS 364.14 kB（gzip 120.52 kB）、CSS 19.01 kB（gzip 4.30 kB），零警告。
 
 **容器状态**：4 个容器全部 healthy；`/api/health` 返回 `database=UP, ollama=UP`。
+
+### P14 接口加固与前端体验升级 ✅
+
+**后端**
+
+- `ConversationController` 重写：请求/响应 DTO 隔离，客户端无法注入 `id`/`createdAt`/`updatedAt`；会话存在性校验；状态白名单。
+- 新增 `MessageMapper.deleteAfterId` + XML：重新生成时清理旧回复，避免历史重复。
+- 新增 `KnowledgeSegmentMapper.deleteById` / `updateContent` + XML。
+- 新增 `KnowledgeSegmentInfo` 实体：对外只暴露 `hasEmbedding`，不回传原始向量。
+- `KnowledgeService`：新增 `listSegments` / `reprocessDocument` / `deleteSegment` / `updateSegment` / `toSegmentInfo`。
+- `KnowledgeController` 新增 4 个端点：`GET /documents/{id}/segments`、`POST /documents/{id}/reprocess`、`PUT /segments/{id}`、`DELETE /segments/{id}`。
+- `ChatService`：抽出 `executeAndPersist`，新增 `regenerate(conversationId, modelId, enableRag)`。
+- `ChatController`：新增 `GET /api/chat/regenerate`。
+- 单测补齐至 **32 个**，全部通过：`DocumentSplitter`(8) / `CalculatorTool`(6) / `ToolRegistry`(8) / `KnowledgeSearchService`(3) / `EmbeddingService`(3) / `AgentExecutor`(4)。
+
+**前端**
+
+- 新增 `react-markdown` + `remark-gfm` + `react-syntax-highlighter`（`PrismLight` 按需注册 30 个常用语言，避免全量语言包拖大体积）。
+- 新增 `Markdown` 组件：GFM 表格 / 任务列表 / 删除线、代码块 oneDark 高亮（长代码块显示行号）、行内代码。
+- `ChatPage`：Markdown 渲染、消息复制 / 重新生成按钮、会话切换器（重命名 / 删除）、工具事件卡片、欢迎语快捷指令。
+- `KnowledgePage`：分段明细展开、整篇重新向量化、分段编辑（重新向量化）、分段删除。
+- API 层：`chat.ts` 抽出 `consumeSseStream` 并新增 `streamRegenerate`；`conversation.ts` 新增 `update`；`knowledge.ts` 新增 4 个方法与 `KnowledgeSegment` 类型。
+
+**验证**
+
+- 后端 `mvn test`（JDK 21）：**32 通过 / 0 失败**。
+- 前端 `npm run build`：通过，产物 JS 659.62 kB（gzip 210.12 kB）、CSS 25.57 kB（gzip 5.36 kB）。
+
+### P15 后端测试补齐与管理端功能收口 ✅
+
+**后端单测（本轮新增 66 个用例，总量 32 → 98）**
+
+| 测试类 | 用例数 | 覆盖点 |
+|---|---|---|
+| `ChatServiceTest` | 18 | `stream` / `regenerate` 全分支：空消息、智能体不存在、新建 / 复用会话、空白回复不落库、模型覆盖、关闭 RAG、执行器抛错、重新生成（会话不存在 / 无用户消息 / 清理旧回复 / 重插用户消息）、上下文组装（systemPrompt + 工具 + 历史，`tool` 角色被过滤） |
+| `KnowledgeServiceTest` | 17 | 分段入库、空分段失败、向量化失败落库并保留原因、缺失文档跳过、分段明细映射（`hasEmbedding` 语义）、重新向量化、分段增删改、向量化先失败时内容不被改坏 |
+| `ConversationControllerTest` | 13 | DTO 隔离（客户端注入 `id`/`createdAt`/`updatedAt` 被丢弃）、名称空值回落、状态白名单、局部更新只改提交字段、存在性校验、列表按 `agentId` 过滤 |
+| `KnowledgeControllerTest` | 18 | 上传校验（名称 / 内容长度）、分段明细、重新向量化（校验先于异步提交）、分段编辑 / 删除、`topK` 边界收敛、`searchContext` 组装 |
+
+**后端**
+
+- `ConversationController` 的请求体新增独立 DTO，写入路径只拷贝白名单字段。
+- `KnowledgeController.normalizeTopK` 对可空入参做了边界收敛：缺失时取 `xunwu.rag.top-k`，
+  最终夹在 `1..20` 区间内（本轮由测试覆盖）。
+
+**前端（补齐管理端能力）**
+
+- `AgentsPage`：表单新增「状态」字段（启用 / 停用）；列表新增「停用 / 启用」按钮。
+  修复编辑已停用智能体时会被静默改回 `ACTIVE` 的问题。
+- `ChatPage`：会话选择器新增「归档 / 取消归档」，归档会话带「已归档」标记；
+  智能体选择器过滤 `INACTIVE` 智能体，选中项被停用后自动回落到首个可用智能体。
+- `ChatPage.scss`：新增 `picker-item-meta` / `picker-item-badge` 样式。
+
+**验证**
+
+- 后端 `mvn test`（JDK 21）：**98 通过 / 0 失败 / 0 错误**。
+- 前端 `npm run build`：通过，产物 JS 661.05 kB（gzip 210.49 kB）、CSS 25.83 kB（gzip 5.39 kB）。

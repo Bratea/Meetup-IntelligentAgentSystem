@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { agentApi, type Agent } from '../api/agent'
 import { modelApi, type ModelInfo } from '../api/model'
-import { streamChat, type AgentEvent } from '../api/chat'
+import { streamChat, streamRegenerate, type AgentEvent } from '../api/chat'
 import {
   conversationApi,
   messageApi,
   type Conversation,
 } from '../api/conversation'
+import Markdown from '../components/Markdown'
 import { gsap, useGSAP } from '../hooks/gsap'
 import '../styles/main.scss'
 import './ChatPage.scss'
@@ -16,6 +17,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
+  stopped?: boolean
   toolEvents?: ToolEvent[]
 }
 
@@ -39,12 +41,17 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [switchingConversation, setSwitchingConversation] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const idSeedRef = useRef(0)
   const lastCountRef = useRef(0)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
 
   const nextMessageId = () => `m${++idSeedRef.current}`
 
@@ -54,6 +61,14 @@ export default function ChatPage() {
     extra?: Partial<ChatMessage>,
   ): ChatMessage => ({ id: nextMessageId(), role, content, ...extra })
 
+  const formatTime = (value?: string) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  }
+
   useEffect(() => {
     Promise.all([agentApi.list(), modelApi.list()])
       .then(([agentList, list]) => {
@@ -61,7 +76,8 @@ export default function ChatPage() {
         // 只保留对话模型；不可用（未配置 API Key / 未安装）的直接排除
         const filtered = list.filter((m) => m.type === 'chat' && m.available !== false)
         setChatModels(filtered)
-        const defaultAgent = agentList[0]
+        // 停用的智能体不再出现在对话页的可选列表
+        const defaultAgent = agentList.find((a) => a.status !== 'INACTIVE')
         if (defaultAgent) {
           setSelectedAgent(defaultAgent)
         }
@@ -82,6 +98,16 @@ export default function ChatPage() {
     }
   }, [chatModels, selectedModel])
 
+  // 选中的智能体被停用后，回落到第一个可用智能体，避免对着停用智能体发消息
+  useEffect(() => {
+    if (!selectedAgent || selectedAgent.status !== 'INACTIVE') return
+    const fallback = agents.find((a) => a.status !== 'INACTIVE') ?? null
+    setSelectedAgent(fallback)
+    setConversationId(null)
+    setMessages([])
+    setStatus('')
+  }, [agents, selectedAgent])
+
   // 智能体切换时拉取它的会话列表
   useEffect(() => {
     if (!selectedAgent) {
@@ -93,6 +119,18 @@ export default function ChatPage() {
       .then(setConversations)
       .catch(() => setConversations([]))
   }, [selectedAgent])
+
+  // 点击会话选择器外部时关闭
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [pickerOpen])
 
   // 页面头部与输入区入场
   useGSAP(
@@ -161,6 +199,67 @@ export default function ChatPage() {
     [],
   )
 
+  /** 统一的 Agent 事件处理，供发送与重新生成共用 */
+  const handleAgentEvent = useCallback(
+    (event: AgentEvent) => {
+      switch (event.type) {
+        case 'thinking':
+          setStatus(`第 ${event.step ?? 1} 步 · 思考中`)
+          break
+        case 'token':
+          updateLastAssistant((msg) => ({
+            ...msg,
+            content: msg.content + String(event.data ?? ''),
+          }))
+          setStatus(`第 ${event.step ?? 1} 步 · 生成中`)
+          break
+        case 'tool_calling': {
+          const payload = event.data as { name: string; arguments: string }
+          updateLastAssistant((msg) => ({
+            ...msg,
+            toolEvents: [
+              ...(msg.toolEvents ?? []),
+              { name: payload.name, arguments: payload.arguments },
+            ],
+          }))
+          setStatus(`调用工具 ${payload.name}`)
+          break
+        }
+        case 'tool_result': {
+          const payload = event.data as { name: string; result: string }
+          updateLastAssistant((msg) => ({
+            ...msg,
+            toolEvents: (msg.toolEvents ?? []).map((t) =>
+              t.name === payload.name ? { ...t, result: payload.result } : t,
+            ),
+          }))
+          setStatus(`工具 ${payload.name} 返回结果`)
+          break
+        }
+        case 'done':
+          updateLastAssistant((msg) => ({ ...msg, streaming: false }))
+          setStatus('已完成')
+          break
+        case 'max_steps':
+          updateLastAssistant((msg) => ({ ...msg, streaming: false }))
+          setStatus('已达最大执行步数')
+          break
+        case 'error':
+          // 服务端已把异常翻译成可读提示，直接展示给用户
+          updateLastAssistant((msg) => ({
+            ...msg,
+            content: msg.content
+              ? `${msg.content}\n\n⚠️ ${String(event.data)}`
+              : `执行出错：${String(event.data)}`,
+            streaming: false,
+          }))
+          setStatus('执行失败')
+          break
+      }
+    },
+    [updateLastAssistant],
+  )
+
   const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text || sending) return
@@ -212,64 +311,15 @@ export default function ChatPage() {
           enableRag,
         },
         {
-          onEvent: (event: AgentEvent) => {
-            switch (event.type) {
-              case 'thinking':
-                setStatus(`第 ${event.step ?? 1} 步 · 思考中`)
-                break
-              case 'token':
-                updateLastAssistant((msg) => ({
-                  ...msg,
-                  content: msg.content + String(event.data ?? ''),
-                }))
-                setStatus(`第 ${event.step ?? 1} 步 · 生成中`)
-                break
-              case 'tool_calling': {
-                const payload = event.data as { name: string; arguments: string }
-                updateLastAssistant((msg) => ({
-                  ...msg,
-                  toolEvents: [
-                    ...(msg.toolEvents ?? []),
-                    { name: payload.name, arguments: payload.arguments },
-                  ],
-                }))
-                setStatus(`调用工具 ${payload.name}`)
-                break
-              }
-              case 'tool_result': {
-                const payload = event.data as { name: string; result: string }
-                updateLastAssistant((msg) => ({
-                  ...msg,
-                  toolEvents: (msg.toolEvents ?? []).map((t) =>
-                    t.name === payload.name ? { ...t, result: payload.result } : t,
-                  ),
-                }))
-                setStatus(`工具 ${payload.name} 返回结果`)
-                break
-              }
-              case 'done':
-                updateLastAssistant((msg) => ({ ...msg, streaming: false }))
-                setStatus('已完成')
-                break
-              case 'max_steps':
-                setStatus('已达最大执行步数')
-                break
-              case 'error':
-                // 服务端已把异常翻译成可读提示，直接展示给用户
-                updateLastAssistant((msg) => ({
-                  ...msg,
-                  content: msg.content
-                    ? `${msg.content}\n\n⚠️ ${String(event.data)}`
-                    : `执行出错：${String(event.data)}`,
-                  streaming: false,
-                }))
-                setStatus('执行失败')
-                break
-            }
-          },
+          onEvent: handleAgentEvent,
           onError: (err) => {
             setStatus(`连接异常: ${err.message}`)
-            updateLastAssistant((msg) => ({ ...msg, streaming: false }))
+            // 流中断时收敛消息状态，避免气泡一直停在“思考中”
+            updateLastAssistant((msg) => ({
+              ...msg,
+              streaming: false,
+              content: msg.content || '（连接中断，请重试）',
+            }))
           },
           onComplete: () => {
             setSending(false)
@@ -280,7 +330,6 @@ export default function ChatPage() {
     } catch (err) {
       setStatus(`请求失败: ${(err as Error).message}`)
       setSending(false)
-      updateLastAssistant((msg) => ({ ...msg, streaming: false }))
     }
   }, [
     input,
@@ -290,18 +339,82 @@ export default function ChatPage() {
     conversationId,
     enableRag,
     updateLastAssistant,
+    handleAgentEvent,
+  ])
+
+  /** 重新生成：以最后一条用户消息为输入，服务端会清除旧回复 */
+  const handleRegenerate = useCallback(async () => {
+    if (!conversationId || sending || !selectedAgent) return
+
+    // 本地移除旧回复，插入新的流式占位
+    setMessages((prev) => {
+      const next = [...prev]
+      if (next[next.length - 1]?.role === 'assistant') {
+        next.pop()
+      }
+      return [...next, makeMessage('assistant', '', { streaming: true, toolEvents: [] })]
+    })
+    setSending(true)
+    setStatus('重新生成中...')
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    try {
+      await streamRegenerate(
+        {
+          conversationId,
+          modelId: selectedModel || undefined,
+          enableRag,
+        },
+        {
+          onEvent: handleAgentEvent,
+          onError: (err) => {
+            setStatus(`连接异常: ${err.message}`)
+            updateLastAssistant((msg) => ({
+              ...msg,
+              streaming: false,
+              content: msg.content || '（连接中断，请重试）',
+            }))
+          },
+          onComplete: () => {
+            setSending(false)
+          },
+        },
+        controller.signal,
+      )
+    } catch (err) {
+      setStatus(`请求失败: ${(err as Error).message}`)
+      setSending(false)
+    }
+  }, [
+    conversationId,
+    sending,
+    selectedAgent,
+    selectedModel,
+    enableRag,
+    updateLastAssistant,
+    handleAgentEvent,
   ])
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
     setSending(false)
     setStatus('已停止')
-  }, [])
+    // 流式中断后消息可能仍停在 streaming 状态，这里补一次收敛
+    updateLastAssistant((msg) => ({
+      ...msg,
+      streaming: false,
+      stopped: true,
+      content: msg.content || '（已停止生成）',
+    }))
+  }, [updateLastAssistant])
 
   const handleClear = useCallback(() => {
     setMessages([])
     setConversationId(null)
     setStatus('')
+    setPickerOpen(false)
   }, [])
 
   const handleSelectConversation = useCallback(
@@ -309,6 +422,7 @@ export default function ChatPage() {
       if (sending || switchingConversation) return
       setSwitchingConversation(true)
       setConversationId(id)
+      setPickerOpen(false)
       try {
         const history = await messageApi.list(id)
         setMessages(
@@ -332,6 +446,94 @@ export default function ChatPage() {
     [sending, switchingConversation],
   )
 
+  const handleNewConversation = useCallback(() => {
+    if (sending) return
+    setMessages([])
+    setConversationId(null)
+    setStatus('')
+    setPickerOpen(false)
+  }, [sending])
+
+  const startRename = useCallback((conversation: Conversation) => {
+    setRenamingId(conversation.id)
+    setRenameValue(conversation.title || '')
+  }, [])
+
+  const commitRename = useCallback(async () => {
+    if (renamingId == null) return
+    const title = renameValue.trim()
+    if (!title) {
+      setRenamingId(null)
+      return
+    }
+    try {
+      const updated = await conversationApi.update(renamingId, { title })
+      setConversations((prev) => prev.map((c) => (c.id === renamingId ? updated : c)))
+      setRenamingId(null)
+    } catch (err) {
+      setStatus(`重命名失败: ${(err as Error).message}`)
+    }
+  }, [renamingId, renameValue])
+
+  /** 归档 / 取消归档：归档后不再作为“新会话”的默认落点，但历史仍可查看 */
+  const handleToggleArchive = useCallback(async (conversation: Conversation) => {
+    const next = conversation.status === 'ARCHIVED' ? 'ACTIVE' : 'ARCHIVED'
+    try {
+      const updated = await conversationApi.update(conversation.id, { status: next })
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversation.id ? updated : c)),
+      )
+    } catch (err) {
+      setStatus(`操作失败: ${(err as Error).message}`)
+    }
+  }, [])
+
+  const handleDeleteConversation = useCallback(
+    async (id: number) => {
+      if (!window.confirm('确认删除该会话及其所有消息？')) return
+      try {
+        await conversationApi.delete(id)
+        setConversations((prev) => prev.filter((c) => c.id !== id))
+        if (conversationId === id) {
+          setConversationId(null)
+          setMessages([])
+          setStatus('')
+        }
+      } catch (err) {
+        setStatus(`删除会话失败: ${(err as Error).message}`)
+      }
+    },
+    [conversationId],
+  )
+
+  const handleCopy = useCallback(async (msg: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(msg.content)
+    } catch {
+      // 剪贴板 API 不可用（非安全上下文等）时降级
+      const textarea = document.createElement('textarea')
+      textarea.value = msg.content
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    setCopiedId(msg.id)
+    window.setTimeout(() => {
+      setCopiedId((current) => (current === msg.id ? null : current))
+    }, 1600)
+  }, [])
+
+  // 停用的智能体不出现在选择器里
+  const selectableAgents = agents.filter((a) => a.status !== 'INACTIVE')
+  const currentConversation = conversations.find((c) => c.id === conversationId)
+  const lastMessage = messages[messages.length - 1]
+  const canRegenerate =
+    Boolean(conversationId) &&
+    !sending &&
+    lastMessage?.role === 'assistant' &&
+    !lastMessage.streaming
+
   return (
     <div className="page">
       <header className="page__header">
@@ -346,15 +548,16 @@ export default function ChatPage() {
             className="select chat__select"
             value={selectedAgent?.id ?? ''}
             onChange={(e) => {
-              const agent = agents.find((a) => a.id === Number(e.target.value))
+              const agent = selectableAgents.find((a) => a.id === Number(e.target.value))
               setSelectedAgent(agent ?? null)
               setConversationId(null)
               setMessages([])
               setStatus('')
+              setPickerOpen(false)
             }}
           >
-            {agents.length === 0 && <option value="">暂无智能体</option>}
-            {agents.map((a) => (
+            {selectableAgents.length === 0 && <option value="">暂无可用智能体</option>}
+            {selectableAgents.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -374,24 +577,101 @@ export default function ChatPage() {
             ))}
           </select>
 
-          <select
-            className="select chat__select"
-            value={conversationId ?? ''}
-            onChange={(e) => {
-              const value = e.target.value
-              if (value) {
-                void handleSelectConversation(Number(value))
-              }
-            }}
-            disabled={sending || switchingConversation}
-          >
-            <option value="">新会话</option>
-            {conversations.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title || `会话 ${c.id}`}
-              </option>
-            ))}
-          </select>
+          {/* 会话选择器：列表 + 重命名 / 删除 */}
+          <div className="chat__picker" ref={pickerRef}>
+            <button
+              className="chat__picker-trigger"
+              onClick={() => setPickerOpen((v) => !v)}
+              disabled={switchingConversation}
+            >
+              <span className="chat__picker-title">
+                {currentConversation?.title || '新会话'}
+              </span>
+              <span className={`chat__picker-caret${pickerOpen ? ' is-open' : ''}`}>
+                ▾
+              </span>
+            </button>
+
+            {pickerOpen && (
+              <div className="chat__picker-menu">
+                <button className="chat__picker-new" onClick={handleNewConversation}>
+                  ＋ 新会话
+                </button>
+                <div className="chat__picker-list">
+                  {conversations.length === 0 && (
+                    <div className="chat__picker-empty">暂无历史会话</div>
+                  )}
+                  {conversations.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`chat__picker-item${c.id === conversationId ? ' is-active' : ''}`}
+                    >
+                      {renamingId === c.id ? (
+                        <input
+                          className="input chat__picker-rename"
+                          value={renameValue}
+                          autoFocus
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              void commitRename()
+                            }
+                            if (e.key === 'Escape') {
+                              setRenamingId(null)
+                            }
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <button
+                            className="chat__picker-item-main"
+                            onClick={() => void handleSelectConversation(c.id)}
+                          >
+                            <span className="chat__picker-item-title">
+                              {c.title || `会话 ${c.id}`}
+                            </span>
+                            <span className="chat__picker-item-meta">
+                              {c.status === 'ARCHIVED' && (
+                                <span className="chat__picker-item-badge">已归档</span>
+                              )}
+                              <span className="chat__picker-item-time">
+                                {formatTime(c.updatedAt)}
+                              </span>
+                            </span>
+                          </button>
+                          <div className="chat__picker-item-actions">
+                            <button
+                              className="chat__picker-icon"
+                              title="重命名"
+                              onClick={() => startRename(c)}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="chat__picker-icon"
+                              title={c.status === 'ARCHIVED' ? '取消归档' : '归档'}
+                              onClick={() => void handleToggleArchive(c)}
+                            >
+                              {c.status === 'ARCHIVED' ? '📤' : '📁'}
+                            </button>
+                            <button
+                              className="chat__picker-icon chat__picker-icon--danger"
+                              title="删除"
+                              onClick={() => void handleDeleteConversation(c.id)}
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             className={`btn btn--sm${enableRag ? ' btn--ghost' : ''}`}
@@ -434,42 +714,73 @@ export default function ChatPage() {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <div key={msg.id} className={`message message--${msg.role}`}>
-            <div className="message__avatar">
-              {msg.role === 'user' ? '我' : '寻'}
-            </div>
-            <div className="message__body">
-              <div className="message__role">
-                {msg.role === 'user' ? '我' : selectedAgent?.name ?? '智能体'}
-                {msg.streaming && <span className="message__cursor">▋</span>}
+        {messages.map((msg, index) => {
+          const isLast = index === messages.length - 1
+          return (
+            <div key={msg.id} className={`message message--${msg.role}`}>
+              <div className="message__avatar">
+                {msg.role === 'user' ? '我' : '寻'}
               </div>
-              <div className="message__content">
-                {msg.content || (msg.streaming ? '思考中…' : '')}
-              </div>
-
-              {msg.toolEvents && msg.toolEvents.length > 0 && (
-                <div className="message__tools">
-                  {msg.toolEvents.map((tool, i) => (
-                    <div key={`${tool.name}-${i}`} className="tool-call">
-                      <div className="tool-call__header">
-                        <span className="tool-call__icon">🔧</span>
-                        <span className="tool-call__name">{tool.name}</span>
-                        {tool.result && <span className="tool-call__ok">✓</span>}
-                      </div>
-                      {tool.arguments && tool.arguments !== '{}' && (
-                        <pre className="tool-call__args">{tool.arguments}</pre>
-                      )}
-                      {tool.result && (
-                        <pre className="tool-call__result">{tool.result}</pre>
-                      )}
-                    </div>
-                  ))}
+              <div className="message__body">
+                <div className="message__role">
+                  {msg.role === 'user' ? '我' : selectedAgent?.name ?? '智能体'}
+                  {msg.streaming && <span className="message__cursor">▋</span>}
                 </div>
-              )}
+
+                {msg.role === 'assistant' ? (
+                  <Markdown
+                    content={msg.content || (msg.streaming ? '思考中…' : '')}
+                    className="message__markdown"
+                  />
+                ) : (
+                  <div className="message__content">{msg.content}</div>
+                )}
+
+                {msg.toolEvents && msg.toolEvents.length > 0 && (
+                  <div className="message__tools">
+                    {msg.toolEvents.map((tool, i) => (
+                      <div key={`${tool.name}-${i}`} className="tool-call">
+                        <div className="tool-call__header">
+                          <span className="tool-call__icon">🔧</span>
+                          <span className="tool-call__name">{tool.name}</span>
+                          {tool.result && <span className="tool-call__ok">✓</span>}
+                        </div>
+                        {tool.arguments && tool.arguments !== '{}' && (
+                          <pre className="tool-call__args">{tool.arguments}</pre>
+                        )}
+                        {tool.result && (
+                          <pre className="tool-call__result">{tool.result}</pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {msg.role === 'assistant' && !msg.streaming && msg.content && (
+                  <div className="message__actions">
+                    <button
+                      className={`message__action${copiedId === msg.id ? ' is-active' : ''}`}
+                      onClick={() => void handleCopy(msg)}
+                      title="复制内容"
+                    >
+                      {copiedId === msg.id ? '✓ 已复制' : '复制'}
+                    </button>
+                    {isLast && (
+                      <button
+                        className="message__action"
+                        onClick={() => void handleRegenerate()}
+                        disabled={!canRegenerate}
+                        title="以该会话最后一条消息重新生成"
+                      >
+                        ↻ 重新生成
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
 

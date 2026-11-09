@@ -30,6 +30,14 @@ public interface KnowledgeSegmentMapper {
     /** 根据文档 ID 删除分段 */
     int deleteByDocumentId(@Param("documentId") Long documentId);
 
+    /** 根据 ID 删除单个分段 */
+    int deleteById(@Param("id") Long id);
+
+    /** 更新分段内容与向量（编辑后重新向量化） */
+    int updateContent(@Param("id") Long id,
+                      @Param("content") String content,
+                      @Param("embedding") String embedding);
+
     /**
      * 向量相似度检索（余弦距离，越小越相似）
      *

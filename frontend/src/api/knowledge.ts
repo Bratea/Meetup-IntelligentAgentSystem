@@ -27,6 +27,16 @@ export interface KnowledgeSearchResult {
   similarity: number
 }
 
+/** 分段明细（不含向量，仅用 hasEmbedding 标记是否已向量化） */
+export interface KnowledgeSegment {
+  id: number
+  documentId: number
+  chunkIndex: number
+  content: string
+  hasEmbedding: boolean
+  createdAt?: string
+}
+
 export const knowledgeApi = {
   listDocuments: () => request<KnowledgeDocument[]>('/knowledge/documents'),
   getDocument: (id: number) => request<KnowledgeDocument>(`/knowledge/documents/${id}`),
@@ -36,6 +46,23 @@ export const knowledgeApi = {
       body: JSON.stringify({ name, content }),
     }),
   delete: (id: number) => request<void>(`/knowledge/documents/${id}`, { method: 'DELETE' }),
+
+  /** 分段明细 */
+  listSegments: (documentId: number) =>
+    request<KnowledgeSegment[]>(`/knowledge/documents/${documentId}/segments`),
+  /** 重新向量化整个文档（异步） */
+  reprocess: (documentId: number) =>
+    request<void>(`/knowledge/documents/${documentId}/reprocess`, { method: 'POST' }),
+  /** 编辑分段内容并重新向量化 */
+  updateSegment: (id: number, content: string) =>
+    request<void>(`/knowledge/segments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+  /** 删除单个分段 */
+  deleteSegment: (id: number) =>
+    request<void>(`/knowledge/segments/${id}`, { method: 'DELETE' }),
+
   search: (query: string, topK?: number) =>
     request<KnowledgeSearchResult[]>('/knowledge/search', {
       method: 'POST',

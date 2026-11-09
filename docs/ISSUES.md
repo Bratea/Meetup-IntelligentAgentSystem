@@ -442,6 +442,12 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
   `OllamaChatModel.buildRequestPrompt()` 会把传入的 `ToolCallingChatOptions`
   通过 `ModelOptionsUtils.copyToTarget` 拷贝进 `OllamaChatOptions` 再合并默认值，
   因此业务层直接构造 `ToolCallingChatOptions` 是安全的。
+- **P14 加固后复验**：
+  - 后端 `mvn test`（JDK 21）32 个用例全通过（新增 6 个测试类）。
+  - 前端 `npm run build` 通过；`Markdown.scss` 修掉一个 `$color-bg-soft)`
+    多写右括号导致的解析错误。
+  - 代码高亮由全量 prism 改为 `PrismLight` 按需注册，JS 体积
+    1175 kB → 659 kB（gzip 399 kB → 210 kB）。
 
 ---
 
@@ -454,3 +460,17 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 3. **Ollama 模型需预先拉取**（`bge-m3` / `qwen2.5:7b`），脚本见 `deploy/ollama/pull-models.sh`。
    本地网络对 `qwen2.5:7b` 的 Cloudflare R2 下载有重定向限制，
    需在可直连的环境执行 `ollama pull`。
+
+### P15 测试补齐与管理端收口复验
+
+- 后端 `mvn test`（JDK 21）：**98 通过 / 0 失败 / 0 错误**
+  （本轮新增 `ChatServiceTest` 18、`KnowledgeServiceTest` 17、
+  `ConversationControllerTest` 13、`KnowledgeControllerTest` 18）。
+- `KnowledgeServiceTest` 用 `TransactionTemplate` mock 直接执行回调，
+  避免为了"事务内行为"引入真实数据库；向量化失败路径断言
+  `errorMessage` 落库且 `segmentMapper.batchInsert` 从未被调用。
+- `ConversationControllerTest` 走 standalone MockMvc + `GlobalExceptionHandler`，
+  断言客户端注入的 `id=999` / `createdAt` / `updatedAt` 不会进入 `insert` 的实体。
+- 前端 `npm run build` 通过（1160 modules，JS 661.05 kB / CSS 25.83 kB）。
+- 修复编辑已停用智能体时 `status` 被硬编码回 `ACTIVE` 的问题：
+  `AgentsPage` 表单补上 `status` 字段并回显。

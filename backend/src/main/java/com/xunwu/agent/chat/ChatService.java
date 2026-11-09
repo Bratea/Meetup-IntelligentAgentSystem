@@ -82,6 +82,24 @@ public class ChatService {
         }
     }
 
+    /**
+     * 重新生成：以会话里最后一条用户消息为输入，清掉它之后的旧助手回复，再跑一次。
+     *
+     * <p>与「新对话」复用同一套执行与落库逻辑，区别只是不重复保存用户消息
+     * （该消息已存在于库中，且刚被用作重新生成的输入）。</p>
+     */
+    public Flux<AgentEvent> regenerate(Long conversationId, String modelId, boolean enableRag) {
+        try {
+            return doRegenerate(conversationId, modelId, enableRag);
+        } catch (BizException e) {
+            log.warn("重新生成被拒绝: {}", e.getMessage());
+            return Flux.just(AgentEvent.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("重新生成失败: conversationId={}", conversationId, e);
+            return Flux.just(AgentEvent.error("重新生成失败，请稍后重试"));
+        }
+    }
+
     private Flux<AgentEvent> doStream(AgentRequest request) {
         if (request.getMessage() == null || request.getMessage().isBlank()) {
             throw BizException.badRequest("消息内容不能为空");
@@ -105,10 +123,49 @@ public class ChatService {
         final Long finalConversationId = conversationId;
         saveMessage(finalConversationId, "user", request.getMessage(), null, null);
 
-        // 4. 组装上下文
-        AgentContext context = buildContext(request, agent);
+        // 4. 组装上下文并执行
+        return executeAndPersist(agent, finalConversationId, request);
+    }
 
-        // 5. 执行并推送事件
+    private Flux<AgentEvent> doRegenerate(Long conversationId, String modelId, boolean enableRag) {
+        Conversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            throw BizException.notFound("会话不存在: " + conversationId);
+        }
+
+        // 找最后一条用户消息作为重新生成的输入
+        List<com.xunwu.agent.entity.Message> history =
+                messageMapper.selectByConversationId(conversationId);
+        com.xunwu.agent.entity.Message lastUser = null;
+        for (com.xunwu.agent.entity.Message m : history) {
+            if ("user".equals(m.getRole())) {
+                lastUser = m;
+            }
+        }
+        if (lastUser == null) {
+            throw BizException.badRequest("该会话没有可重新生成的用户消息");
+        }
+
+        // 清掉这条用户消息之后的全部消息（旧助手回复），避免历史里出现重复回复
+        int removed = messageMapper.deleteAfterId(conversationId, lastUser.getId());
+        log.info("重新生成: conversationId={}, 移除旧消息 {} 条", conversationId, removed);
+
+        Agent agent = loadAgent(conversation.getAgentId());
+        AgentRequest request = new AgentRequest();
+        request.setAgentId(conversation.getAgentId());
+        request.setConversationId(conversationId);
+        request.setMessage(lastUser.getContent());
+        request.setModelId(modelId);
+        request.setEnableRag(enableRag);
+        return executeAndPersist(agent, conversationId, request);
+    }
+
+    /**
+     * 组装上下文、执行引擎并把助手回复落库。
+     * 普通对话与重新生成共用。
+     */
+    private Flux<AgentEvent> executeAndPersist(Agent agent, Long conversationId, AgentRequest request) {
+        AgentContext context = buildContext(request, agent);
         return agentExecutor.executeStream(context)
                 .doOnNext(event -> {
                     if ("done".equals(event.getType())) {
@@ -116,16 +173,15 @@ public class ChatService {
                         String content = data == null ? "" : String.valueOf(data);
                         // 空内容不入库：避免历史里出现空气泡，污染后续上下文
                         if (content.isBlank()) {
-                            log.warn("对话结束但内容为空，跳过落库: conversationId={}",
-                                    finalConversationId);
+                            log.warn("对话结束但内容为空，跳过落库: conversationId={}", conversationId);
                             return;
                         }
-                        saveMessage(finalConversationId, "assistant",
+                        saveMessage(conversationId, "assistant",
                                 content, context.getModelId(), null);
                     }
                 })
-                .doOnComplete(() -> log.info("对话完成: conversationId={}", finalConversationId))
-                .doOnError(e -> log.error("对话异常: conversationId={}", finalConversationId, e))
+                .doOnComplete(() -> log.info("对话完成: conversationId={}", conversationId))
+                .doOnError(e -> log.error("对话异常: conversationId={}", conversationId, e))
                 // 理论上 AgentExecutor 已把异常转成 error 事件，这里是最后一道兜底
                 .onErrorResume(e -> Flux.just(AgentEvent.error(toUserMessage(e))));
     }

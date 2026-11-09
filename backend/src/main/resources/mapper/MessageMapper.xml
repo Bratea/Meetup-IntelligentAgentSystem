@@ -41,4 +41,10 @@
         DELETE FROM message WHERE id = #{id}
     </delete>
 
+    <delete id="deleteAfterId">
+        DELETE FROM message
+        WHERE conversation_id = #{conversationId}
+          AND id &gt; #{messageId}
+    </delete>
+
 </mapper>

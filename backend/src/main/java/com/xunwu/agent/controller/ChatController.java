@@ -36,4 +36,17 @@ public class ChatController {
     public Flux<AgentEvent> stream(@ModelAttribute AgentRequest request) {
         return chatService.stream(request);
     }
+
+    /**
+     * SSE 重新生成
+     *
+     * <p>以会话内最后一条用户消息为输入重新执行，旧的助手回复会被清除，
+     * 避免同一条用户消息在历史里出现多份回复。</p>
+     */
+    @GetMapping(value = "/regenerate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<AgentEvent> regenerate(@RequestParam Long conversationId,
+                                       @RequestParam(required = false) String modelId,
+                                       @RequestParam(defaultValue = "true") boolean enableRag) {
+        return chatService.regenerate(conversationId, modelId, enableRag);
+    }
 }

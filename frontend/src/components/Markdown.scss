@@ -1,0 +1,149 @@
+@use '../styles/variables' as *;
+
+.markdown {
+  // 覆盖外层 message__content 的 pre-wrap，让 Markdown 排版生效
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.75;
+  font-size: $font-size-base;
+
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  p {
+    margin: 0 0 10px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 16px 0 8px;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  h1 {
+    font-size: $font-size-xl;
+  }
+
+  h2 {
+    font-size: $font-size-lg;
+  }
+
+  h3 {
+    font-size: $font-size-md;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-size: $font-size-base;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+  }
+
+  li {
+    margin: 3px 0;
+  }
+
+  li > p {
+    margin: 0;
+  }
+
+  blockquote {
+    margin: 0 0 10px;
+    padding: 2px 12px;
+    border-left: 3px solid $color-primary;
+    color: $color-text-dim;
+    background: $color-primary-soft;
+    border-radius: 0 $radius-sm $radius-sm 0;
+  }
+
+  hr {
+    margin: 14px 0;
+    border: none;
+    border-top: 1px solid $color-border;
+  }
+
+  a {
+    color: $color-primary;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  strong {
+    color: $color-text;
+    font-weight: 650;
+  }
+
+  // 表格（GFM）
+  table {
+    width: 100%;
+    margin: 0 0 12px;
+    border-collapse: collapse;
+    font-size: $font-size-sm;
+    display: block;
+    overflow-x: auto;
+  }
+
+  th,
+  td {
+    padding: 7px 10px;
+    border: 1px solid $color-border;
+    text-align: left;
+  }
+
+  th {
+    background: $color-bg-soft;
+    font-weight: 650;
+    color: $color-text;
+  }
+
+  tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  // 行内代码
+  &__inline-code {
+    background: $color-bg-soft;
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: $font-size-sm;
+    color: $color-accent;
+    font-family: $font-mono;
+  }
+
+  // 代码块
+  &__code-block {
+    margin: 0 0 12px;
+    border-radius: $radius;
+    border: 1px solid $color-border;
+    font-size: $font-size-sm !important;
+
+    // SyntaxHighlighter 自带背景，这里统一圆角与边框
+    > code {
+      font-family: $font-mono !important;
+    }
+  }
+
+  // 任务列表（GFM）
+  input[type='checkbox'] {
+    margin-right: 6px;
+    accent-color: $color-primary;
+  }
+}

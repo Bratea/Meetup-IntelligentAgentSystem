@@ -50,6 +50,17 @@
         DELETE FROM knowledge_segment WHERE document_id = #{documentId}
     </delete>
 
+    <delete id="deleteById">
+        DELETE FROM knowledge_segment WHERE id = #{id}
+    </delete>
+
+    <update id="updateContent">
+        UPDATE knowledge_segment
+        SET content = #{content},
+            embedding = #{embedding}::vector
+        WHERE id = #{id}
+    </update>
+
     <!--
       向量相似度检索：使用余弦距离 <=>
       HNSW 索引 idx_knowledge_segment_embedding_hnsw 加速

@@ -25,4 +25,12 @@ public interface MessageMapper {
 
     /** 根据 ID 删除 */
     int deleteById(@Param("id") Long id);
+
+    /**
+     * 删除指定消息之后的全部消息（同会话内）。
+     *
+     * <p>用于「重新生成」：保留触发重新生成的用户消息，清掉它之后的旧助手回复。</p>
+     */
+    int deleteAfterId(@Param("conversationId") Long conversationId,
+                      @Param("messageId") Long messageId);
 }

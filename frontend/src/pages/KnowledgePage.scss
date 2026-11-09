@@ -115,4 +115,77 @@
     line-height: 1.6;
     word-break: break-word;
   }
+
+  &__doc-actions {
+    display: flex;
+    gap: $space-sm;
+    margin-top: $space-md;
+  }
+
+  // ==================== 分段明细 ====================
+  &__segments {
+    margin-top: $space-lg;
+    padding-top: $space-md;
+    border-top: 1px dashed $color-border;
+    display: flex;
+    flex-direction: column;
+    gap: $space-md;
+  }
+
+  &__segments-loading,
+  &__segments-empty {
+    padding: $space-md;
+    text-align: center;
+    color: $color-text-muted;
+    font-size: $font-size-sm;
+  }
+
+  &__segment {
+    background: $color-bg-soft;
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    padding: $space-md;
+    transition: border-color $transition;
+
+    &:hover {
+      border-color: $color-border-strong;
+    }
+  }
+
+  &__segment-head {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    margin-bottom: $space-sm;
+  }
+
+  &__segment-index {
+    font-size: $font-size-sm;
+    font-weight: 650;
+    color: $color-primary;
+  }
+
+  &__segment-content {
+    font-size: $font-size-sm;
+    color: $color-text-dim;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.7;
+    max-height: 240px;
+    overflow: auto;
+    @include scrollbar(6px);
+  }
+
+  &__segment-edit {
+    width: 100%;
+    min-height: 120px;
+    margin-bottom: $space-sm;
+    font-size: $font-size-sm;
+  }
+
+  &__segment-actions {
+    display: flex;
+    gap: $space-sm;
+    margin-top: $space-sm;
+  }
 }

@@ -5,6 +5,7 @@ import com.xunwu.agent.common.BizException;
 import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.KnowledgeDocument;
 import com.xunwu.agent.entity.KnowledgeSearchResult;
+import com.xunwu.agent.entity.KnowledgeSegmentInfo;
 import com.xunwu.agent.mapper.KnowledgeDocumentMapper;
 import com.xunwu.agent.rag.KnowledgeSearchService;
 import com.xunwu.agent.rag.KnowledgeService;
@@ -100,6 +101,41 @@ public class KnowledgeController {
         return ApiResponse.ok();
     }
 
+    /** 文档分段明细 */
+    @GetMapping("/documents/{id}/segments")
+    public ApiResponse<List<KnowledgeSegmentInfo>> listSegments(@PathVariable Long id) {
+        return ApiResponse.ok(knowledgeService.listSegments(id));
+    }
+
+    /** 重新向量化整个文档（异步） */
+    @PostMapping("/documents/{id}/reprocess")
+    public ApiResponse<Void> reprocess(@PathVariable Long id) {
+        knowledgeService.reprocessDocument(id);
+        taskExecutor.execute(() -> {
+            try {
+                knowledgeService.processDocument(id);
+            } catch (Exception e) {
+                log.error("文档重新向量化任务异常: documentId={}", id, e);
+            }
+        });
+        return ApiResponse.ok();
+    }
+
+    /** 编辑分段内容并重新向量化 */
+    @PutMapping("/segments/{id}")
+    public ApiResponse<Void> updateSegment(@PathVariable Long id,
+                                           @RequestBody SegmentRequest request) {
+        knowledgeService.updateSegment(id, request.getContent());
+        return ApiResponse.ok();
+    }
+
+    /** 删除单个分段 */
+    @DeleteMapping("/segments/{id}")
+    public ApiResponse<Void> deleteSegment(@PathVariable Long id) {
+        knowledgeService.deleteSegment(id);
+        return ApiResponse.ok();
+    }
+
     /** 知识库检索测试 */
     @PostMapping("/search")
     public ApiResponse<List<KnowledgeSearchResult>> search(@RequestBody SearchRequest request) {
@@ -133,5 +169,10 @@ public class KnowledgeController {
     public static class SearchRequest {
         private String query;
         private Integer topK;
+    }
+
+    @Data
+    public static class SegmentRequest {
+        private String content;
     }
 }
