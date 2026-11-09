@@ -2,7 +2,7 @@
  * 知识库 API
  */
 
-import { request } from './request'
+import { request, type PageResult } from './request'
 
 export interface KnowledgeDocument {
   id: number
@@ -38,7 +38,16 @@ export interface KnowledgeSegment {
 }
 
 export const knowledgeApi = {
-  listDocuments: () => request<KnowledgeDocument[]>('/knowledge/documents'),
+  /** 分页文档列表；不传参数时后端按默认（第 1 页 / 每页 20 条）处理 */
+  listDocuments: (page?: number, size?: number) => {
+    const query = new URLSearchParams()
+    if (page !== undefined) query.set('page', String(page))
+    if (size !== undefined) query.set('size', String(size))
+    const qs = query.toString()
+    return request<PageResult<KnowledgeDocument>>(
+      `/knowledge/documents${qs ? `?${qs}` : ''}`,
+    )
+  },
   getDocument: (id: number) => request<KnowledgeDocument>(`/knowledge/documents/${id}`),
   upload: (name: string, content: string) =>
     request<KnowledgeDocument>('/knowledge/documents', {

@@ -69,6 +69,11 @@ mybatis:
 
 # 寻晤智能agent系统 自定义配置
 xunwu:
+  auth:
+    # 接口访问令牌（Bearer Token）。
+    # 留空 = 关闭鉴权（启动时会打 warn 提醒，仅建议本地开发环境）。
+    # 生产 / 自部署必须配置，例如：export XUNWU_AUTH_TOKEN=$(openssl rand -hex 24)
+    token: ${XUNWU_AUTH_TOKEN:}
   agent:
     # 单次任务最大执行步数（防止智能体无限循环）
     max-steps: 8

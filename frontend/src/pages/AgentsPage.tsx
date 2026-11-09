@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { agentApi, type Agent, type AgentPayload } from '../api/agent'
 import { modelApi, type ModelInfo } from '../api/model'
 import { toolApi, type ToolDefinitionInfo } from '../api/tool'
+import Pagination from '../components/Pagination'
 import { usePageIntro } from '../hooks/gsap'
 import '../styles/main.scss'
 import './AgentsPage.scss'
@@ -37,15 +38,22 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // 列表分页：后端默认每页 20 条，上限 200
+  const [agentPage, setAgentPage] = useState(1)
+  const [agentSize, setAgentSize] = useState(20)
+  const [agentTotal, setAgentTotal] = useState(0)
+  const [agentTotalPages, setAgentTotalPages] = useState(0)
 
   const load = useCallback(async () => {
     try {
-      const [agentList, modelList, toolList] = await Promise.all([
-        agentApi.list(),
+      const [agentPageResult, modelList, toolList] = await Promise.all([
+        agentApi.list(agentPage, agentSize),
         modelApi.list(),
         toolApi.list(),
       ])
-      setAgents(agentList)
+      setAgents(agentPageResult.records)
+      setAgentTotal(agentPageResult.total)
+      setAgentTotalPages(agentPageResult.totalPages)
       // 只保留可用中的对话模型，避免选到未配置 Key 的远端模型
       setModels(modelList.filter((m) => m.type === 'chat' && m.available !== false))
       setTools(toolList)
@@ -55,11 +63,16 @@ export default function AgentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [agentPage, agentSize])
 
   useEffect(() => {
     load()
   }, [load])
+
+  const handlePageChange = (page: number, size: number) => {
+    setAgentPage(page)
+    setAgentSize(size)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,6 +139,11 @@ export default function AgentsPage() {
     if (!window.confirm('确认删除该智能体？相关会话将一并删除。')) return
     try {
       await agentApi.delete(id)
+      // 删掉的是当前页最后一条时，页码会超出总页数，往前退一页
+      if (agents.length === 1 && agentPage > 1) {
+        setAgentPage(agentPage - 1)
+        return
+      }
       await load()
     } catch (err) {
       setError((err as Error).message)
@@ -341,6 +359,13 @@ export default function AgentsPage() {
               </div>
             </div>
           ))}
+          <Pagination
+            page={agentPage}
+            size={agentSize}
+            total={agentTotal}
+            totalPages={agentTotalPages}
+            onChange={handlePageChange}
+          />
         </section>
       </div>
     </div>

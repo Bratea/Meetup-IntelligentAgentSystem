@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
+import com.xunwu.agent.config.AuthProperties;
 import com.xunwu.agent.config.XunwuProperties;
 
 /**
@@ -12,7 +13,7 @@ import com.xunwu.agent.config.XunwuProperties;
  * @author xunwu
  */
 @SpringBootApplication
-@EnableConfigurationProperties(XunwuProperties.class)
+@EnableConfigurationProperties({XunwuProperties.class, AuthProperties.class})
 public class AgentApplication {
 
     public static void main(String[] args) {

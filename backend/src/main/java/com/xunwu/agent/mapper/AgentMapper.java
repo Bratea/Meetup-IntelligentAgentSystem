@@ -23,8 +23,16 @@ public interface AgentMapper {
     /** 根据 ID 查询 */
     Agent selectById(@Param("id") Long id);
 
-    /** 查询全部（按更新时间倒序） */
-    List<Agent> selectAll();
+    /** 总记录数（分页用） */
+    long countAll();
+
+    /**
+     * 分页查询（按更新时间倒序）。
+     *
+     * <p>用 LIMIT / OFFSET 而不是全量取回再内存截断：数据量上去后，
+     * 后者会把整表读进内存，且无法利用索引。</p>
+     */
+    List<Agent> selectPage(@Param("offset") int offset, @Param("limit") int limit);
 
     /** 根据 ID 删除 */
     int deleteById(@Param("id") Long id);

@@ -1,0 +1,80 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.auth-gate {
+  @include flex(row, center, center);
+  min-height: 100vh;
+  padding: $space-lg;
+
+  &--checking {
+    flex-direction: column;
+    gap: $space-md;
+    color: $color-text-dim;
+  }
+
+  &__spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid $color-border;
+    border-top-color: $color-primary;
+    animation: auth-gate-spin 0.8s linear infinite;
+  }
+
+  &__card {
+    @include glass;
+    width: 100%;
+    max-width: 400px;
+    padding: $space-3xl;
+    display: flex;
+    flex-direction: column;
+    gap: $space-md;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: $font-size-sm;
+    line-height: 1.6;
+    color: $color-text-dim;
+  }
+
+  &__input {
+    padding: 10px 12px;
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    background: $color-bg-soft;
+    color: $color-text;
+    font-size: $font-size-base;
+
+    &:focus {
+      outline: none;
+      border-color: $color-primary;
+      box-shadow: $shadow-glow;
+    }
+  }
+
+  &__error {
+    font-size: $font-size-sm;
+    color: $color-danger;
+  }
+
+  &__submit {
+    width: 100%;
+  }
+
+  &__clear {
+    width: 100%;
+  }
+}
+
+@keyframes auth-gate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

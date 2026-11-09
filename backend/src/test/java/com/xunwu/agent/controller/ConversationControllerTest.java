@@ -16,7 +16,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -183,6 +185,53 @@ class ConversationControllerTest {
     }
 
     @Test
+    void update_withAgentId_changesAgent() throws Exception {
+        when(mapper.selectById(1L)).thenReturn(existing());
+        when(mapper.update(any(Conversation.class))).thenReturn(1);
+
+        mockMvc.perform(put("/api/conversations/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"agentId\":9}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(mapper).update(captor.capture());
+        assertEquals(9L, captor.getValue().getAgentId());
+        // 未提交的字段必须保持 null，由动态 SQL 跳过
+        assertNull(captor.getValue().getTitle());
+    }
+
+    @Test
+    void update_withUnknownAgentId_returns404() throws Exception {
+        when(mapper.selectById(1L)).thenReturn(existing());
+        when(agentMapper.selectById(404L)).thenReturn(null);
+
+        mockMvc.perform(put("/api/conversations/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"agentId\":404}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404));
+
+        // 不能带着不存在的 agentId 落库：conversation.agent_id 是外键
+        verify(mapper, never()).update(any());
+    }
+
+    @Test
+    void update_withoutAgentId_leavesAgentUntouched() throws Exception {
+        when(mapper.selectById(1L)).thenReturn(existing());
+        when(mapper.update(any(Conversation.class))).thenReturn(1);
+
+        mockMvc.perform(put("/api/conversations/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"改名\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(mapper).update(captor.capture());
+        assertNull(captor.getValue().getAgentId());
+    }
+
+    @Test
     void update_unknownId_returns404() throws Exception {
         when(mapper.selectById(99L)).thenReturn(null);
 
@@ -214,26 +263,75 @@ class ConversationControllerTest {
     }
 
     @Test
-    void list_byAgentId_delegatesToMapper() throws Exception {
-        when(mapper.selectByAgentId(3L)).thenReturn(List.of(existing()));
+    void list_byAgentId_returnsPage() throws Exception {
+        when(mapper.selectPageByAgentId(eq(3L), anyInt(), anyInt()))
+                .thenReturn(List.of(existing()));
+        when(mapper.countByAgentId(3L)).thenReturn(1L);
 
         mockMvc.perform(get("/api/conversations").param("agentId", "3"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(20));
 
-        verify(mapper).selectByAgentId(3L);
-        verify(mapper, never()).selectAll();
+        verify(mapper).selectPageByAgentId(eq(3L), eq(0), eq(20));
+        verify(mapper).countByAgentId(3L);
+        verify(mapper, never()).selectPageAll(anyInt(), anyInt());
     }
 
     @Test
-    void list_withoutAgentId_returnsAll() throws Exception {
-        when(mapper.selectAll()).thenReturn(List.of(existing()));
+    void list_withoutAgentId_returnsPage() throws Exception {
+        when(mapper.selectPageAll(anyInt(), anyInt())).thenReturn(List.of(existing()));
+        when(mapper.countAll()).thenReturn(1L);
 
         mockMvc.perform(get("/api/conversations"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.total").value(1));
 
-        verify(mapper).selectAll();
+        verify(mapper).selectPageAll(0, 20);
+    }
+
+    @Test
+    void list_oversizedPageSize_isCappedAt200() throws Exception {
+        when(mapper.selectPageAll(anyInt(), anyInt())).thenReturn(List.of());
+        when(mapper.countAll()).thenReturn(0L);
+
+        mockMvc.perform(get("/api/conversations").param("size", "99999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.size").value(200));
+
+        // 单页上限 200：不允许 size=99999 一次拉走整表
+        verify(mapper).selectPageAll(0, 200);
+    }
+
+    @Test
+    void list_nonPositiveParams_fallBackToDefaults() throws Exception {
+        when(mapper.selectPageAll(anyInt(), anyInt())).thenReturn(List.of());
+        when(mapper.countAll()).thenReturn(0L);
+
+        mockMvc.perform(get("/api/conversations").param("page", "0").param("size", "-5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(20));
+
+        // 分页参数写错应按默认分页，而不是报错
+        verify(mapper).selectPageAll(0, 20);
+    }
+
+    @Test
+    void list_thirdPage_offsetsCorrectly() throws Exception {
+        when(mapper.selectPageAll(anyInt(), anyInt())).thenReturn(List.of());
+        when(mapper.countAll()).thenReturn(0L);
+
+        mockMvc.perform(get("/api/conversations").param("page", "3").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(3));
+
+        // (3-1) * 10 = 20
+        verify(mapper).selectPageAll(20, 10);
     }
 
     private Conversation existing() {

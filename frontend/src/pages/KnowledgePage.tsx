@@ -8,6 +8,7 @@ import {
 import { usePageIntro } from '../hooks/gsap'
 import '../styles/main.scss'
 import './KnowledgePage.scss'
+import Pagination from '../components/Pagination'
 
 export default function KnowledgePage() {
   const root = usePageIntro()
@@ -17,6 +18,11 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  // 列表分页：后端默认每页 20 条，上限 200
+  const [docPage, setDocPage] = useState(1)
+  const [docSize, setDocSize] = useState(20)
+  const [docTotal, setDocTotal] = useState(0)
+  const [docTotalPages, setDocTotalPages] = useState(0)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<KnowledgeSearchResult[]>([])
@@ -33,15 +39,17 @@ export default function KnowledgePage() {
 
   const load = useCallback(async () => {
     try {
-      const list = await knowledgeApi.listDocuments()
-      setDocuments(list)
+      const pageResult = await knowledgeApi.listDocuments(docPage, docSize)
+      setDocuments(pageResult.records)
+      setDocTotal(pageResult.total)
+      setDocTotalPages(pageResult.totalPages)
       setError('')
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [docPage, docSize])
 
   const pollTimerRef = useRef<number | null>(null)
   const pollCountRef = useRef(0)
@@ -98,6 +106,11 @@ export default function KnowledgePage() {
     }
   }
 
+  const handlePageChange = (page: number, size: number) => {
+    setDocPage(page)
+    setDocSize(size)
+  }
+
   const handleDelete = async (id: number) => {
     if (!window.confirm('确认删除该文档及其所有分段？')) return
     try {
@@ -105,6 +118,11 @@ export default function KnowledgePage() {
       if (expandedId === id) {
         setExpandedId(null)
         setSegments([])
+      }
+      // 删掉的是当前页最后一条时，页码会超出总页数，往前退一页
+      if (documents.length === 1 && docPage > 1) {
+        setDocPage(docPage - 1)
+        return
       }
       await load()
     } catch (err) {
@@ -433,6 +451,13 @@ export default function KnowledgePage() {
               </button>
             </div>
           ))}
+          <Pagination
+            page={docPage}
+            size={docSize}
+            total={docTotal}
+            totalPages={docTotalPages}
+            onChange={handlePageChange}
+          />
         </section>
       </div>
     </div>

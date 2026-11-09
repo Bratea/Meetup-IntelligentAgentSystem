@@ -17,8 +17,21 @@ public interface MessageMapper {
     /** 新增消息，返回自增主键 */
     int insert(Message message);
 
-    /** 根据会话查询消息（按 id 升序） */
+    /** 根据会话查询消息（按 id 升序，供对话执行时回溯历史） */
     List<Message> selectByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 统计会话消息数（分页用） */
+    long countByConversationId(@Param("conversationId") Long conversationId);
+
+    /**
+     * 分页查询会话消息（按 id 倒序，即最新一页）。
+     *
+     * <p>会话消息按「最新一页」翻页：page=1 取最新的 size 条，page=2 取更早的。
+     * 调用方需自行翻转为时间升序 —— 打开会话时用户关心的是最近的消息。</p>
+     */
+    List<Message> selectPageByConversationId(@Param("conversationId") Long conversationId,
+                                             @Param("offset") int offset,
+                                             @Param("limit") int limit);
 
     /** 根据 ID 查询 */
     Message selectById(@Param("id") Long id);

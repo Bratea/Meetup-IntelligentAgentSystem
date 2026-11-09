@@ -61,12 +61,17 @@
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM knowledge_document
+    </select>
+
     <!-- 列表接口不返回正文，避免为了一行预览传输整篇文档 -->
-    <select id="selectSummaryList" resultMap="SummaryResultMap">
+    <select id="selectSummaryPage" resultMap="SummaryResultMap">
         SELECT id, name, LEFT(content, 200) AS content_preview,
                status, segment_count, error_message, created_at, updated_at
         FROM knowledge_document
         ORDER BY updated_at DESC
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <delete id="deleteById">

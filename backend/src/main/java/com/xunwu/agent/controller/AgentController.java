@@ -2,6 +2,8 @@ package com.xunwu.agent.controller;
 
 import com.xunwu.agent.common.ApiResponse;
 import com.xunwu.agent.common.BizException;
+import com.xunwu.agent.common.PageQuery;
+import com.xunwu.agent.common.PageResult;
 import com.xunwu.agent.entity.Agent;
 import com.xunwu.agent.mapper.AgentMapper;
 import lombok.Data;
@@ -31,10 +33,15 @@ public class AgentController {
         this.agentMapper = agentMapper;
     }
 
-    /** 智能体列表 */
+    /** 智能体列表（分页，page 从 1 开始，默认每页 20 条） */
     @GetMapping
-    public ApiResponse<List<Agent>> list() {
-        return ApiResponse.ok(agentMapper.selectAll());
+    public ApiResponse<PageResult<Agent>> list(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        PageQuery query = PageQuery.of(page, size);
+        List<Agent> records = agentMapper.selectPage(query.offset(), query.getSize());
+        return ApiResponse.ok(PageResult.of(
+                records, agentMapper.countAll(), query.getPage(), query.getSize()));
     }
 
     /** 智能体详情 */

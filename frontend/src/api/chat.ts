@@ -2,7 +2,7 @@
  * SSE 流式对话 API
  */
 
-import { API_BASE } from './request'
+import { API_BASE, authHeaders, clearAccessToken } from './request'
 
 export type AgentEventType =
   | 'thinking'
@@ -57,7 +57,7 @@ async function consumeSseStream(
   try {
     response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'text/event-stream' },
+      headers: { Accept: 'text/event-stream', ...authHeaders() },
       signal,
     })
   } catch (error) {
@@ -70,6 +70,11 @@ async function consumeSseStream(
     )
     callbacks.onError?.(err)
     throw err
+  }
+
+  if (response.status === 401) {
+    // 令牌无效：清掉本地令牌，让全局守卫把用户送回令牌输入页
+    clearAccessToken()
   }
 
   if (!response.ok || !response.body) {

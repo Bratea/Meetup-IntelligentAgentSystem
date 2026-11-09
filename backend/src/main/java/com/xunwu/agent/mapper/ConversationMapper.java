@@ -23,11 +23,20 @@ public interface ConversationMapper {
     /** 根据 ID 查询 */
     Conversation selectById(@Param("id") Long id);
 
-    /** 按智能体查询会话列表 */
-    List<Conversation> selectByAgentId(@Param("agentId") Long agentId);
+    /** 总记录数（分页用） */
+    long countAll();
 
-    /** 查询全部会话 */
-    List<Conversation> selectAll();
+    /** 按智能体统计会话数（分页用） */
+    long countByAgentId(@Param("agentId") Long agentId);
+
+    /** 分页查询全部会话（按更新时间倒序） */
+    List<Conversation> selectPageAll(@Param("offset") int offset,
+                                    @Param("limit") int limit);
+
+    /** 分页查询指定智能体的会话（按更新时间倒序） */
+    List<Conversation> selectPageByAgentId(@Param("agentId") Long agentId,
+                                           @Param("offset") int offset,
+                                           @Param("limit") int limit);
 
     /** 根据 ID 删除 */
     int deleteById(@Param("id") Long id);

@@ -2,6 +2,8 @@ package com.xunwu.agent.controller;
 
 import com.xunwu.agent.common.ApiResponse;
 import com.xunwu.agent.common.BizException;
+import com.xunwu.agent.common.PageQuery;
+import com.xunwu.agent.common.PageResult;
 import com.xunwu.agent.entity.Conversation;
 import com.xunwu.agent.mapper.AgentMapper;
 import com.xunwu.agent.mapper.ConversationMapper;
@@ -30,13 +32,24 @@ public class ConversationController {
         this.agentMapper = agentMapper;
     }
 
-    /** 会话列表 */
+    /** 会话列表（分页，可按智能体过滤） */
     @GetMapping
-    public ApiResponse<List<Conversation>> list(@RequestParam(required = false) Long agentId) {
+    public ApiResponse<PageResult<Conversation>> list(
+            @RequestParam(required = false) Long agentId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        PageQuery query = PageQuery.of(page, size);
         if (agentId != null) {
-            return ApiResponse.ok(conversationMapper.selectByAgentId(agentId));
+            List<Conversation> records = conversationMapper.selectPageByAgentId(
+                    agentId, query.offset(), query.getSize());
+            return ApiResponse.ok(PageResult.of(
+                    records, conversationMapper.countByAgentId(agentId),
+                    query.getPage(), query.getSize()));
         }
-        return ApiResponse.ok(conversationMapper.selectAll());
+        List<Conversation> records = conversationMapper.selectPageAll(
+                query.offset(), query.getSize());
+        return ApiResponse.ok(PageResult.of(
+                records, conversationMapper.countAll(), query.getPage(), query.getSize()));
     }
 
     /** 会话详情 */
@@ -68,7 +81,12 @@ public class ConversationController {
         return ApiResponse.ok(conversation);
     }
 
-    /** 更新会话（支持改标题 / 状态） */
+    /**
+     * 更新会话（支持改所属智能体 / 标题 / 状态）。
+     *
+     * <p>agentId 与 create 走同一套校验：不校验会直接触发外键约束异常，
+     * 由全局异常处理器兑底成 400，客户端无法知道是自己的 agentId 写错了。</p>
+     */
     @PutMapping("/{id}")
     public ApiResponse<Conversation> update(@PathVariable Long id,
                                             @RequestBody ConversationRequest request) {
@@ -76,8 +94,15 @@ public class ConversationController {
         if (existing == null) {
             throw BizException.notFound("会话不存在: " + id);
         }
+        if (request.getAgentId() != null
+                && agentMapper.selectById(request.getAgentId()) == null) {
+            throw BizException.notFound("智能体不存在: " + request.getAgentId());
+        }
         Conversation conversation = new Conversation();
         conversation.setId(id);
+        if (request.getAgentId() != null) {
+            conversation.setAgentId(request.getAgentId());
+        }
         if (request.getTitle() != null) {
             conversation.setTitle(normalizeTitle(request.getTitle()));
         }

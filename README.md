@@ -139,24 +139,50 @@ docker compose up -d
 
 ---
 
+## 🔐 接口鉴权
+
+后端所有 `/api/**` 接口支持 Bearer Token 鉴权，默认**关闭**（本地开发方便）。
+
+```bash
+# 生成一个随机令牌
+openssl rand -hex 24
+
+# 启动时注入
+export XUNWU_AUTH_TOKEN=<你的令牌>
+docker compose up -d
+```
+
+配置后：
+
+- 请求需带 `Authorization: Bearer <令牌>`，否则返回 `401`；
+- `/api/health` 始终免鉴权（Docker / K8s 探针依赖它）；
+- 前端首次进入会弹出令牌输入框，验证通过后存在 localStorage，之后自动携带；
+- 令牌错误时前端会清掉本地令牌并要求重新输入。
+
+> 令牌明文存储在服务端配置中，仅适合内网 / 自建部署。
+> 公网部署请在前面加一层反向代理（nginx）做 HTTPS，
+> 并考虑接入正式的用户体系。
+
+---
+
 ## 🔌 主要 API
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/health` | 健康检查 |
+| GET | `/api/health` | 健康检查（**唯一免鉴权接口**） |
 | GET | `/api/models` | 获取可用模型列表 |
 | GET | `/api/tools` | 获取可用工具列表 |
-| GET | `/api/agents` | 智能体列表 |
+| GET | `/api/agents?page=&size=` | 智能体列表（分页，默认 20 条/页，上限 200） |
 | POST | `/api/agents` | 创建智能体 |
 | GET | `/api/agents/{id}` | 智能体详情 |
 | PUT | `/api/agents/{id}` | 更新智能体 |
 | DELETE | `/api/agents/{id}` | 删除智能体 |
-| GET | `/api/conversations` | 会话列表 |
+| GET | `/api/conversations?agentId=&page=&size=` | 会话列表（分页，`agentId` 可选） |
 | POST | `/api/conversations` | 创建会话 |
-| GET | `/api/conversations/{id}/messages` | 会话消息 |
+| GET | `/api/conversations/{id}/messages?page=&size=` | 会话消息（分页，默认 200 条/页，按最新一页取） |
 | GET | `/api/chat/stream` | **SSE 流式对话** |
 | GET | `/api/chat/regenerate` | 重新生成最后一轮回答 |
-| GET | `/api/knowledge/documents` | 知识库文档列表 |
+| GET | `/api/knowledge/documents?page=&size=` | 知识库文档列表（分页） |
 | POST | `/api/knowledge/documents` | 上传文档（自动分段 + 向量化） |
 | DELETE | `/api/knowledge/documents/{id}` | 删除文档 |
 | POST | `/api/knowledge/search` | 知识库检索测试 |

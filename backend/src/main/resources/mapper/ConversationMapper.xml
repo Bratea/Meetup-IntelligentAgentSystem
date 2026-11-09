@@ -39,17 +39,28 @@
         WHERE id = #{id}
     </select>
 
-    <select id="selectByAgentId" resultMap="BaseResultMap">
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM conversation
+    </select>
+
+    <select id="countByAgentId" resultType="long">
+        SELECT COUNT(*) FROM conversation
+        WHERE agent_id = #{agentId}
+    </select>
+
+    <select id="selectPageAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM conversation
+        ORDER BY updated_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectPageByAgentId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM conversation
         WHERE agent_id = #{agentId}
         ORDER BY updated_at DESC
-    </select>
-
-    <select id="selectAll" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Column_List"/>
-        FROM conversation
-        ORDER BY updated_at DESC
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <delete id="deleteById">

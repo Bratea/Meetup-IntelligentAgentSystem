@@ -54,10 +54,15 @@
         WHERE id = #{id}
     </select>
 
-    <select id="selectAll" resultMap="BaseResultMap">
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM agent
+    </select>
+
+    <select id="selectPage" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM agent
         ORDER BY updated_at DESC
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <delete id="deleteById">

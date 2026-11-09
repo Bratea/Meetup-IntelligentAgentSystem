@@ -2,6 +2,8 @@ package com.xunwu.agent.controller;
 
 import com.xunwu.agent.common.ApiResponse;
 import com.xunwu.agent.common.BizException;
+import com.xunwu.agent.common.PageQuery;
+import com.xunwu.agent.common.PageResult;
 import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.KnowledgeDocument;
 import com.xunwu.agent.entity.KnowledgeSearchResult;
@@ -48,10 +50,16 @@ public class KnowledgeController {
         this.taskExecutor = taskExecutor;
     }
 
-    /** 文档列表 */
+    /** 文档列表（分页，page 从 1 开始，默认每页 20 条） */
     @GetMapping("/documents")
-    public ApiResponse<List<KnowledgeDocument>> listDocuments() {
-        return ApiResponse.ok(documentMapper.selectSummaryList());
+    public ApiResponse<PageResult<KnowledgeDocument>> listDocuments(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        PageQuery query = PageQuery.of(page, size);
+        List<KnowledgeDocument> records = documentMapper.selectSummaryPage(
+                query.offset(), query.getSize());
+        return ApiResponse.ok(PageResult.of(
+                records, documentMapper.countAll(), query.getPage(), query.getSize()));
     }
 
     /** 文档详情 */

@@ -70,8 +70,10 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    Promise.all([agentApi.list(), modelApi.list()])
-      .then(([agentList, list]) => {
+    // 智能体选择器需要一份较全的名单，一次拉满后端单页上限（200）
+    Promise.all([agentApi.list(1, 200), modelApi.list()])
+      .then(([agentPageResult, list]) => {
+        const agentList = agentPageResult.records
         setAgents(agentList)
         // 只保留对话模型；不可用（未配置 API Key / 未安装）的直接排除
         const filtered = list.filter((m) => m.type === 'chat' && m.available !== false)
@@ -116,7 +118,7 @@ export default function ChatPage() {
     }
     conversationApi
       .list(selectedAgent.id)
-      .then(setConversations)
+      .then((pageResult) => setConversations(pageResult.records))
       .catch(() => setConversations([]))
   }, [selectedAgent])
 
@@ -434,7 +436,7 @@ export default function ChatPage() {
       try {
         const history = await messageApi.list(id)
         setMessages(
-          history
+          history.records
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .map((m) =>
               makeMessage(m.role as 'user' | 'assistant', m.content),

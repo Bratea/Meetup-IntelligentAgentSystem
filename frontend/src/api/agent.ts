@@ -2,7 +2,7 @@
  * 智能体 API
  */
 
-import { request } from './request'
+import { request, type PageResult } from './request'
 
 export interface Agent {
   id: number
@@ -30,7 +30,14 @@ export interface AgentPayload {
 }
 
 export const agentApi = {
-  list: () => request<Agent[]>('/agents'),
+  /** 分页列表；不传参数时后端按默认（第 1 页 / 每页 20 条）处理 */
+  list: (page?: number, size?: number) => {
+    const query = new URLSearchParams()
+    if (page !== undefined) query.set('page', String(page))
+    if (size !== undefined) query.set('size', String(size))
+    const qs = query.toString()
+    return request<PageResult<Agent>>(`/agents${qs ? `?${qs}` : ''}`)
+  },
   get: (id: number) => request<Agent>(`/agents/${id}`),
   create: (data: AgentPayload) =>
     request<Agent>('/agents', { method: 'POST', body: JSON.stringify(data) }),

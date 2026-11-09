@@ -1,0 +1,37 @@
+@use '../styles/variables' as *;
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: $space-sm;
+  margin-top: $space-md;
+  padding-top: $space-md;
+  border-top: 1px solid $color-border;
+
+  &__info {
+    font-size: $font-size-sm;
+    color: $color-text-dim;
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+  }
+
+  &__size {
+    padding: 5px 8px;
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    background: $color-bg-card;
+    color: $color-text;
+    font-size: $font-size-sm;
+    cursor: pointer;
+
+    &:hover {
+      border-color: $color-border-strong;
+    }
+  }
+}

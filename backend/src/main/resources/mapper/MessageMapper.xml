@@ -31,6 +31,20 @@
         ORDER BY id ASC
     </select>
 
+    <select id="countByConversationId" resultType="long">
+        SELECT COUNT(*) FROM message
+        WHERE conversation_id = #{conversationId}
+    </select>
+
+    <!-- 倒序取最新一页，由调用方翻转为时间升序 -->
+    <select id="selectPageByConversationId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM message
+        WHERE conversation_id = #{conversationId}
+        ORDER BY id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <select id="selectById" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM message
