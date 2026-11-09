@@ -55,7 +55,6 @@ class ChatServiceTest {
 
         when(toolRegistry.getTools(anyList())).thenReturn(new ArrayList<>());
         when(toolRegistry.getFixedTools()).thenReturn(new ArrayList<>());
-        when(toolRegistry.resolveToolNames(anyList())).thenReturn(new ArrayList<>());
         when(toolRegistry.getFixedToolNames()).thenReturn(new ArrayList<>());
         when(chatClientRegistry.getChatClient(any())).thenReturn(mock(
                 org.springframework.ai.chat.client.ChatClient.class));

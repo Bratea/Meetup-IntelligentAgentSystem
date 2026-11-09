@@ -345,3 +345,55 @@ java.lang.IllegalStateException: Multiple tools with the same name (knowledge_se
 - 前端 `npm run build`：通过。
 - 实测：构造 `toolIds=["knowledge_search","current_time"]` 的智能体，
   对话正常完成并返回 `done`（修复前只推 thinking 就报错）。
+
+---
+
+## P20：资源释放、异常脱敏与并发幂等
+
+**问题**
+
+1. `AgentExecutor.callModelStreaming` 用 `subscribe(...)` 等流式调用结束，
+   但把返回的 `Disposable` 丢掉了。一旦 `latch.await` 超时（10 分钟），
+   底层 HTTP 调用仍在后台跑完 —— 连接、线程、模型算力全部白烧，
+   订阅也不会被回收。
+
+2. `AgentToolService.execute` 的兜底分支把 `e.getMessage()` 原样写进返回给模型的
+   JSON 错误对象。工具底层异常（DB、连接池、SQL）的 message 可能含连接串、
+   表名、内部地址，这些内容会经模型转述进入对话内容。
+
+3. `KnowledgeService.processDocument` 由 `taskExecutor` 异步执行，本身没有幂等保护。
+   前端连点两次「重新向量化」会提交两个任务，两者都执行
+   「删旧分段 → 插入新分段」，最终同一文档下出现两份重复分段，
+   检索结果被重复内容占满。
+
+4. `KnowledgePage` 的 `actionError` 只在 `expandedId === doc.id` 时渲染。
+   而「重新向量化」是对未展开文档也能执行的操作，失败时用户看不到任何反馈。
+   另外轮询计数 `pollCountRef` 在所有文档处理完成后没有归零。
+
+5. `ToolRegistry.resolveToolNames` 在 P19 之后已无生产调用方
+   （被 `getMergedToolNames` 取代），只剩测试引用，属于死代码。
+
+**修复**
+
+- `AgentExecutor`：持有 `Disposable`，在 `latch.await` 超时与 `InterruptedException`
+  两条路径上都调用 `dispose()`，确保底层订阅被释放。
+- `AgentToolService`：把「取工具」与「执行工具」拆开。
+  未注册工具名回传（模型需要知道这个工具不存在，否则会反复调用）；
+  执行异常统一替换为兜底文案，底层信息只留日志。
+- `KnowledgeService`：按文档 ID 分段加锁（16 个常驻锁对象）串行化处理。
+  锁对象不移除，因此不会出现「后来者拿到新锁、与持旧锁者并发」的窗口，
+  也不会泄漏锁对象。
+- `KnowledgePage`：`actionError` 提升到页面级渲染（保证一定可见），
+  并在所有文档处理结束后把轮询计数归零。
+- `ToolRegistry`：删除 `resolveToolNames` 及其测试，
+  清理 `ChatServiceTest` 里对应的过期 mock，
+  修正 `getTools_returnsMutableList` 中「调用方会 addAll 固定工具」的过时注释。
+
+**验证**
+
+- 后端 `mvn test`：**134 通过 / 0 失败 / 0 错误**
+  （新增 `AgentToolServiceTest` 4 个，删除 `resolveToolNames` 用例 1 个）。
+- 前端 `npm run build`：通过。
+- 实测：普通对话与 RAG 问答正常；
+  构造带不存在工具（`not_exist_tool`）的智能体，对话正常完成并返回 `done`，
+  未出现 500。

@@ -37,15 +37,8 @@ class ToolRegistryTest {
     @Test
     void getTools_returnsMutableList() {
         List<ToolCallback> tools = registry.getTools(List.of("tool_a"));
-        // 调用方会 addAll 固定工具，不可变列表会抛 UnsupportedOperationException
+        // 返回可变列表：调用方可能需要在此基础上继续组合
         assertDoesNotThrow(() -> tools.addAll(new ArrayList<>()));
-    }
-
-    @Test
-    void resolveToolNames_onlyRegisteredAndEnabled() {
-        List<String> names = registry.resolveToolNames(
-                List.of("tool_a", "tool_b", "tool_disabled", "not_exist"));
-        assertEquals(List.of("tool_a", "tool_b"), names);
     }
 
     @Test

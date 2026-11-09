@@ -37,15 +37,22 @@ public class AgentToolService {
      */
     public String execute(String name, String arguments) {
         long start = System.currentTimeMillis();
+        ToolCallback tool;
         try {
-            ToolCallback tool = toolRegistry.getTool(name);
+            tool = toolRegistry.getTool(name);
+        } catch (IllegalArgumentException e) {
+            // 未注册的工具名需要回给模型，让它不要再重复调用
+            log.warn("工具未注册: name={}", name);
+            return toErrorJson(name, e.getMessage());
+        }
+        try {
             String result = tool.call(arguments, new ToolContext(Map.of()));
             log.info("工具执行成功: name={}, cost={}ms", name, System.currentTimeMillis() - start);
             return result == null ? "" : result;
         } catch (Exception e) {
             log.error("工具执行失败: name={}", name, e);
-            // 必须用 JSON 序列化输出，避免消息中的引号/反斜杠破坏 JSON 结构
-            return toErrorJson(name, e.getMessage());
+            // 底层异常可能含 SQL / 内部地址，不进入对话内容
+            return toErrorJson(name, "请稍后重试或联系管理员");
         }
     }
 

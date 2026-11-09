@@ -537,3 +537,19 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 **复验**：后端 `mvn test` 131 通过 / 0 失败（`ToolRegistryTest` +5）；
 构造 `toolIds=["knowledge_search","current_time"]` 的智能体实测对话正常完成（修复前只推一个 thinking 事件就报错）；
 前端 `npm run build` 通过。
+
+---
+
+## 第九轮：资源释放、异常脱敏与并发幂等（P20）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P20-1 | `AgentExecutor.callModelStreaming` 丢弃了 `subscribe()` 返回的 `Disposable`：模型响应超时后底层 HTTP 调用仍在后台跑，白占连接与算力 | 持有 `Disposable`，超时 / 中断时 `dispose()` |
+| P20-2 | `AgentToolService.execute` 把 `e.getMessage()` 原样回给模型，可能含连接串 / SQL / 内部地址并进入对话内容 | 只有「未注册的工具」名回传（让模型停止重复调用），其余统一兜底文案 |
+| P20-3 | `KnowledgeService.processDocument` 无幂等保护：连点两次「重新向量化」会并发各插一份分段，检索结果全是重复内容 | 按文档 ID 分段加锁串行化（锁对象常驻，避免「新锁与旧锁并发」窗口） |
+| P20-4 | `KnowledgePage` 的 `actionError` 只在分段展开时渲染，未展开文档的「重新向量化」失败完全无反馈；轮询计数在处理结束后未归零 | 错误提示提升到页面级；所有文档处理结束后归零计数 |
+| P20-5 | `ToolRegistry.resolveToolNames` 生产代码已无调用方（被 `getMergedToolNames` 取代），只剩测试引用 | 删除方法及对应测试，清理 `ChatServiceTest` 过期 mock，修正 `getTools_returnsMutableList` 过时注释 |
+
+**复验**：后端 `mvn test` 134 通过 / 0 失败（新增 `AgentToolServiceTest` 4 个，删除 `resolveToolNames` 对应用例 1 个）；
+前端 `npm run build` 通过；实测普通对话、RAG 问答正常，
+智能体配置不存在工具时被静默过滤、对话正常完成（不 500）。

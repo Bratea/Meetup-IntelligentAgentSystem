@@ -36,6 +36,10 @@ public class KnowledgeService {
     private final XunwuProperties properties;
     private final TransactionTemplate transactionTemplate;
 
+    /** 文档处理锁分段数：同一文档串行处理，避免连点两次「重新向量化」各插一份分段 */
+    private static final int LOCK_STRIPES = 16;
+    private final Object[] documentLocks = new Object[LOCK_STRIPES];
+
     public KnowledgeService(KnowledgeDocumentMapper documentMapper,
                             KnowledgeSegmentMapper segmentMapper,
                             DocumentSplitter documentSplitter,
@@ -70,6 +74,32 @@ public class KnowledgeService {
      * 由前端轮询接口展示真实状态。</p>
      */
     public void processDocument(Long documentId) {
+        // 同一文档串行：异步任务可能重入（前端连点、重复提交），
+        // 不串行会往同一文档重复插入分段，检索结果全是重复内容
+        synchronized (lockFor(documentId)) {
+            doProcessDocument(documentId);
+        }
+    }
+
+    /**
+     * 取文档对应的锁对象。
+     *
+     * <p>用固定分段的数组而不是 {@code Map<文档, 锁>}：锁不会被移除，
+     * 因此不会出现“后来者拿到新锁、与持旧锁者并发”的窗口，也不会泄漏锁对象。</p>
+     */
+    private Object lockFor(Long documentId) {
+        int index = (int) (documentId % LOCK_STRIPES);
+        synchronized (documentLocks) {
+            Object lock = documentLocks[index];
+            if (lock == null) {
+                lock = new Object();
+                documentLocks[index] = lock;
+            }
+            return lock;
+        }
+    }
+
+    private void doProcessDocument(Long documentId) {
         KnowledgeDocument document = documentMapper.selectById(documentId);
         if (document == null) {
             log.warn("文档不存在，跳过处理: documentId={}", documentId);

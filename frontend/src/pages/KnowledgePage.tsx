@@ -71,6 +71,8 @@ export default function KnowledgePage() {
     } else if (!hasProcessing && pollTimerRef.current !== null) {
       window.clearInterval(pollTimerRef.current)
       pollTimerRef.current = null
+      // 计数归零：下一次上传 / 重新向量化能从满额时长重新算
+      pollCountRef.current = 0
     }
   }, [documents, load])
 
@@ -252,6 +254,9 @@ export default function KnowledgePage() {
 
       <div className="page__body knowledge">
         {error && <div className="knowledge__error">{error}</div>}
+        {/* actionError 可能在未展开的文档上产生（如重新向量化失败），
+            放页面级才能保证一定看得到 */}
+        {actionError && <div className="knowledge__error">{actionError}</div>}
 
         <div className="knowledge__grid">
           <section className="card">
@@ -352,10 +357,6 @@ export default function KnowledgePage() {
                     {reprocessingId === doc.id ? '处理中…' : '重新向量化'}
                   </button>
                 </div>
-
-                {actionError && expandedId === doc.id && (
-                  <div className="knowledge__doc-error">{actionError}</div>
-                )}
 
                 {expandedId === doc.id && (
                   <div className="knowledge__segments">

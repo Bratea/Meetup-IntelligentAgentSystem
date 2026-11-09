@@ -79,25 +79,6 @@ public class ToolRegistry {
     }
 
     /**
-     * 按名称列表获取实际可用的工具名（已过滤未注册与禁用项）。
-     *
-     * <p>用于填充 {@code ToolCallingChatOptions.toolNames}：
-     * Spring AI 的 {@code DefaultToolCallingManager.resolveToolDefinitions} 会对
-     * toolNames 中无法解析的名字抛 {@code IllegalStateException}，
-     * 因此这里必须只返回真正已注册的工具名。</p>
-     */
-    public List<String> resolveToolNames(List<String> names) {
-        if (names == null || names.isEmpty()) {
-            return List.of();
-        }
-        return names.stream()
-                .filter(tools::containsKey)
-                .filter(n -> tools.get(n).enabled())
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
-    /**
      * 按名称列表获取工具，并追加固定工具（同名去重）。
      *
      * <p>固定工具对所有智能体生效。若调用方已在 {@code names} 里显式列出某个固定工具，

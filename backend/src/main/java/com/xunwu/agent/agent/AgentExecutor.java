@@ -17,6 +17,7 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.stereotype.Component;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
@@ -204,7 +205,7 @@ public class AgentExecutor {
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<Throwable> error = new AtomicReference<>();
 
-        responseFlux
+        Disposable subscription = responseFlux
                 .takeUntilOther(cancelSignal)
                 .subscribe(
                         chunk -> {
@@ -233,10 +234,13 @@ public class AgentExecutor {
 
         try {
             if (!latch.await(MODEL_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                // 超时必须 dispose：否则底层 HTTP 调用仍在后台跑，白占连接与算力
+                subscription.dispose();
                 // TimeoutException 是受检异常，包装后由 toUserMessage 统一翻译成可读提示
                 throw new IllegalStateException(new TimeoutException("模型响应超时"));
             }
         } catch (InterruptedException e) {
+            subscription.dispose();
             Thread.currentThread().interrupt();
             throw new IllegalStateException("模型调用被中断", e);
         }
