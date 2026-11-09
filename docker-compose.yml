@@ -63,6 +63,10 @@ services:
       # 会把空串改写为占位值，避免 Spring AI 的非空断言导致启动失败
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      # LongCat：未配置时为空串，后端会把该模型标记为不可用
+      LONGCAT_API_KEY: ${LONGCAT_API_KEY:-}
+      LONGCAT_BASE_URL: ${LONGCAT_BASE_URL:-https://api.longcat.chat/openai/v1}
+      LONGCAT_MODEL: ${LONGCAT_MODEL:-LongCat-2.5}
     ports:
       - "8080:8080"
     networks:

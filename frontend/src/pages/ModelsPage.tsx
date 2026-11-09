@@ -50,7 +50,7 @@ export default function ModelsPage() {
         <div>
           <h1 className="page__title">🧠 模型管理</h1>
           <div className="page__desc">
-            DeepSeek · 智谱 GLM · Ollama 本地模型统一接入
+            DeepSeek · 智谱 GLM · Ollama · LongCat 统一接入
           </div>
         </div>
       </header>

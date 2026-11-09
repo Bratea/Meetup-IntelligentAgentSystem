@@ -13,7 +13,7 @@
 | 🧠 **Agent 执行引擎** | 基于 Spring AI 实现 **Think-Execute** 执行循环，串联模型推理、工具调用与结果回传；状态机管理任务执行状态，并设置**最大执行步数**，避免智能体陷入无限循环。 |
 | 🔧 **工具管理与调用** | 抽象统一工具接口与工具管理服务，区分**固定工具**与**可选工具**，支持为智能体配置可用工具；通过 `ToolCallingManager` 统一管理工具调度与执行，降低工具实现与 Agent 核心流程之间的耦合。 |
 | 📚 **RAG 知识检索** | 基于 **PostgreSQL + pgvector** 构建向量存储和相似度检索流程，使用 **Ollama 本地运行 bge-m3** 模型生成文档及查询文本的向量，将检索到的知识片段组装为上下文提供给 Agent。为向量字段建立 **HNSW 索引**，并通过 **Top-K** 限制检索结果数量。 |
-| 🤖 **多模型接入** | 设计 `ChatClientRegistry` 模型管理组件，根据模型标识获取对应的 `ChatClient`，统一管理 **DeepSeek / 智谱 / Ollama** 的调用入口，实现模型选择与 Agent 执行逻辑解耦。 |
+| 🤖 **多模型接入** | 设计 `ChatClientRegistry` 模型管理组件，根据模型标识获取对应的 `ChatClient`，统一管理 **DeepSeek / 智谱 / Ollama / LongCat** 的调用入口，实现模型选择与 Agent 执行逻辑解耦。 |
 | 💨 **流式交互** | 基于 **SSE** 实现后端模型响应的实时推送，前端使用 React 与 TypeScript 接收并展示生成内容，减少用户等待完整回答的感知时间。 |
 | 🎨 **前端体验** | **SCSS** 设计系统（变量 / Mixin / 渐变 / 玻璃拟态）+ **GSAP** 入场动画与路由过渡，暗色主题，工具调用过程可视化。 |
 
@@ -23,7 +23,7 @@
 
 - **后端**：Java 21、Spring Boot 3.5.8、Spring AI 1.1.0、MyBatis、Spring WebFlux（SSE）
 - **数据库**：PostgreSQL 17、pgvector（HNSW 索引）
-- **模型**：Ollama（bge-m3 向量模型 / qwen2.5 对话模型）、DeepSeek API、智谱 GLM API
+- **模型**：Ollama（bge-m3 向量模型 / qwen2.5 对话模型）、DeepSeek API、智谱 GLM API、LongCat API
 - **前端**：React 19、TypeScript 5.8、Vite 6、SCSS、GSAP、fetch stream（SSE）
 - **部署**：Docker Compose（PostgreSQL + Ollama + 后端 + 前端）
 
@@ -133,6 +133,7 @@ npm run dev
 ```bash
 export DEEPSEEK_API_KEY=sk-xxxx
 export ZHIPU_API_KEY=xxxx
+export LONGCAT_API_KEY=xxxx
 docker compose up -d
 ```
 
@@ -153,7 +154,8 @@ docker compose up -d
 | GET | `/api/conversations` | 会话列表 |
 | POST | `/api/conversations` | 创建会话 |
 | GET | `/api/conversations/{id}/messages` | 会话消息 |
-| POST | `/api/chat/stream` | **SSE 流式对话** |
+| GET | `/api/chat/stream` | **SSE 流式对话** |
+| GET | `/api/chat/regenerate` | 重新生成最后一轮回答 |
 | GET | `/api/knowledge/documents` | 知识库文档列表 |
 | POST | `/api/knowledge/documents` | 上传文档（自动分段 + 向量化） |
 | DELETE | `/api/knowledge/documents/{id}` | 删除文档 |
