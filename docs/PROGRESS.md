@@ -452,3 +452,68 @@ java.lang.IllegalStateException: Multiple tools with the same name (knowledge_se
   留下未重打包的 thin jar。打包前先停掉运行中的实例。
   校验产物大小时用 `stat -c %s`，不要用 `ls -l | awk '{print $5}'`
   （Git Bash 下该列不是字节数）。
+
+---
+
+## 接口鉴权、列表分页与会话改绑（P22）
+
+**发现**
+
+- **接口鉴权缺失（P22-1）**：所有 `/api/**` 接口无任何访问控制。
+  项目没有用户体系（无 user 表、无登录页），
+  一旦部署到内网以外，任何人都能读写全部数据。
+  这是目前最大的安全缺口。
+- **列表接口全量返回（P22-2）**：`/api/agents`、`/api/conversations`、
+  `/api/messages`、`/api/knowledge/documents` 都一次性返回全部记录，
+  数据量上去后传输与前端渲染都会卡。
+- **会话改绑被静默忽略（P22-3）**：
+  `PUT /api/conversations/{id}` 有意只接受 title / status
+  （Javadoc 已说明），请求体里的 `agentId` 被忽略，
+  客户端无法知道改绑未生效。
+
+**修复**
+
+- 新增 `AuthProperties`（`xunwu.auth.token`）与 `AuthTokenFilter`：
+  令牌从 `XUNWU_AUTH_TOKEN` 读取，留空 = 关闭鉴权（启动打 warn）；
+  比对用 `MessageDigest.isEqual` 常量时间比较，避免计时侧信道；
+  白名单 `/api/health`（Docker / K8s 探针）、`/error`、OPTIONS 预检；
+  401 响应带 `WWW-Authenticate: Bearer`，结构与 `ApiResponse` 一致。
+- 前端新增 `AuthGate`：进入时用一次轻量请求探测后端是否需要令牌，
+  需要则显示输入框，验证通过后写入 localStorage；
+  `request.ts` / `chat.ts` 统一携带 `Authorization` 头，
+  401 时清掉本地令牌并回到输入态。
+- 新增 `PageQuery`（默认 page=1 / size=20，上限 200，非正数回落默认）
+  与 `PageResult`（records / total / page / size / totalPages）。
+  四个 Mapper 改为 count + `LIMIT/OFFSET` 分页查询；
+  消息列表按「最新一页」翻页（SQL 倒序取、返回前翻转为时间升序），
+  默认每页 200 条。
+- 顺带删除分页改造后变为死代码的 `selectAll` / `selectByAgentId` /
+  `selectSummaryList`；`MessageMapper.selectByConversationId` 保留
+  （`ChatService` 仍在用）。
+- 前端新增通用 `Pagination` 组件（页码信息 + 每页条数 + 上下页），
+  AgentsPage / KnowledgePage 接入；
+  ChatPage 智能体选择器一次拉满 200 条。
+- `ConversationController.update` 接受 `agentId` 并与 `create`
+  走同一套校验（不存在返回 404）。
+- `application.yml` / `.env.example` / `docker-compose.yml` / README 同步。
+
+**验证**
+
+- 后端 `mvn test`：**155 通过 / 0 失败 / 0 错误**
+  （新增 `AuthTokenFilterTest` 8 个、`MessageControllerTest` 4 个、
+  `ConversationControllerTest` +6 个）。
+- 前端 `npm run build`：通过（tsc -b + vite build，3.81s）。
+- 端到端实测（后端在 18080 运行，配置 `XUNWU_AUTH_TOKEN`）：
+  - `/api/health` 无令牌 → 200；`/api/agents` 无令牌 / 错误令牌 → 401；
+  - 正确令牌 → 200 且返回分页结构；`size=99999` 被夹到 200；
+    OPTIONS 预检无令牌放行；
+  - `PUT /api/conversations/{id}` 传不存在的 agentId → 404，
+    传已存在的 agentId → 200 且生效；
+  - SSE 对话带令牌正常出 thinking / token / done，
+    LongCat-2.5 正确答出 pgvector。
+- 构建备注（Windows）：本次启动时把环境变量名误写成 `XUNGCAT_AUTH_TOKEN`
+  （少一个 W），导致后端读到空令牌、鉴权未启用。
+  变量名以 `application.yml` 的 `${XUNWU_AUTH_TOKEN:}` 为准。
+- 已知限制：令牌明文存在服务端配置与浏览器 localStorage 中，
+  仅适合内网 / 自建部署；公网部署需在前面加反向代理做 HTTPS
+  并接入正式用户体系。

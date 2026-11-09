@@ -569,3 +569,30 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 前端 `npm run build` 通过；CI YAML 解析校验通过。
 端到端实测：`POST /api/conversations` 传不存在的 agentId 返回 404（修复前触发约束异常），
 传正常 agentId 返回 200；LongCat-2.5 带 RAG 问答正确引用知识库（pgvector），事件序列 thinking / token / done 正常。
+
+---
+
+## 第十一轮：接口鉴权、列表分页与会话改绑（P22）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P22-1 | 所有 `/api/**` 接口裸奔：任何能访问端口的人都能读写全部数据（含删除智能体、清空会话、读取知识库）。项目没有用户体系，一旦部署到内网以外即完全暴露 | 新增 `AuthProperties` + `AuthTokenFilter`（`OncePerRequestFilter`）：令牌从 `XUNWU_AUTH_TOKEN` 读取，比对用 `MessageDigest.isEqual` 常量时间比较；`/api/health`、`/error`、OPTIONS 预检白名单；401 带 `WWW-Authenticate: Bearer` 且响应体结构与 `ApiResponse` 一致。前端新增 `AuthGate` 探测 + 令牌输入，验证通过后存 localStorage，`request.ts` / `chat.ts` 统一携带 `Authorization` 头，401 时清掉本地令牌 |
+| P22-2 | `/api/agents`、`/api/conversations`、`/api/messages`、`/api/knowledge/documents` 全部全量返回：数据量上去后单次请求传输与渲染都会卡，且无法利用索引 | 新增 `PageQuery`（默认 page=1 / size=20，上限 200，非正数回落默认）与 `PageResult`（records / total / page / size / totalPages）；四个 Mapper 改为 count + `LIMIT/OFFSET`。消息列表按「最新一页」翻页（SQL 倒序取、返回前翻转为时间升序），默认每页 200。前端新增通用 `Pagination` 组件，AgentsPage / KnowledgePage 接入 |
+| P22-3 | `PUT /api/conversations/{id}` 静默忽略请求体里的 `agentId`：客户端以为改绑成功，实际库里的 `agent_id` 没变，且传不存在的 agentId 也不会报错 | 接受 `agentId` 并与 `create` 走同一套校验（不存在返回 404），避免直接触发 `conversation.agent_id` 外键约束异常 |
+| P22-4 | 分页改造后 `AgentMapper.selectAll`、`ConversationMapper.selectAll` / `selectByAgentId`、`KnowledgeDocumentMapper.selectSummaryList` 生产代码已无调用方 | 删除方法及对应 XML（`MessageMapper.selectByConversationId` 保留，`ChatService` 仍在用） |
+
+**复验**：后端 `mvn test` **155 通过 / 0 失败**（新增 `AuthTokenFilterTest` 8 个、
+`MessageControllerTest` 4 个、`ConversationControllerTest` +6 个）；
+前端 `npm run build` 通过（tsc -b + vite build）。
+
+端到端实测（后端在 18080 运行，配置 `XUNWU_AUTH_TOKEN`）：
+- `/api/health` 无令牌 → 200；`/api/agents` 无令牌 / 错误令牌 → 401 + 可读文案；
+- 正确令牌 → 200 且返回 `{records,total,page,size,totalPages}`；
+- `size=99999` 被夹到 200；OPTIONS 预检无令牌放行；
+- `PUT /api/conversations/{id}` 传不存在的 agentId → 404；
+- SSE 对话带令牌正常出 thinking / token / done，LongCat-2.5 正确答出 pgvector。
+
+**已知限制**：令牌明文存在服务端配置与浏览器 localStorage 中，
+仅适合内网 / 自建部署；公网部署需在前面加反向代理做 HTTPS 并接入正式用户体系。
+ChatPage 的智能体选择器一次拉满 200 条（后端单页上限），
+智能体数量超过 200 时选择器不会显示全部。
