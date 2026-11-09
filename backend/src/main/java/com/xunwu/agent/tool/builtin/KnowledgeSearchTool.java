@@ -1,5 +1,6 @@
 package com.xunwu.agent.tool.builtin;
 
+import com.xunwu.agent.common.BizException;
 import com.xunwu.agent.config.XunwuProperties;
 import com.xunwu.agent.entity.KnowledgeSearchResult;
 import com.xunwu.agent.rag.KnowledgeSearchService;
@@ -66,8 +67,12 @@ public class KnowledgeSearchTool {
                     items.size(), System.currentTimeMillis() - start);
             return toJson(Map.of("query", query, "count", items.size(), "results", items));
         } catch (Exception e) {
-            log.warn("知识库检索工具执行失败: {}", e.getMessage());
-            return toJson(Map.of("error", "知识库检索失败: " + e.getMessage()));
+            log.warn("知识库检索工具执行失败", e);
+            // BizException 的 message 已脱敏（会提示该拉取哪个模型），可回给模型；
+            // 其余异常可能含 SQL、内部地址，统一兜底
+            String detail = e instanceof BizException ? e.getMessage() : null;
+            return toJson(Map.of("error", "知识库检索失败: "
+                    + (detail != null ? detail : "请稍后重试或联系管理员")));
         }
     }
 

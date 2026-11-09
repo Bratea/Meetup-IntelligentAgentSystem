@@ -72,6 +72,50 @@ class AgentControllerTest {
     }
 
     @Test
+    void create_oversizedDescription_returns400() throws Exception {
+        mockMvc.perform(post("/api/agents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"助手\",\"description\":\"" + "x".repeat(513) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("智能体描述不能超过 512 个字符"));
+
+        verify(agentMapper, never()).insert(any());
+    }
+
+    @Test
+    void create_oversizedAvatar_returns400() throws Exception {
+        mockMvc.perform(post("/api/agents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"助手\",\"avatar\":\"" + "x".repeat(256) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("头像地址不能超过 255 个字符"));
+
+        verify(agentMapper, never()).insert(any());
+    }
+
+    @Test
+    void create_oversizedModelId_returns400() throws Exception {
+        mockMvc.perform(post("/api/agents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"助手\",\"modelId\":\"" + "x".repeat(65) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("模型标识不能超过 64 个字符"));
+
+        verify(agentMapper, never()).insert(any());
+    }
+
+    @Test
+    void create_descriptionAtLimit_succeeds() throws Exception {
+        givenInsertBackfillsId();
+        when(agentMapper.selectById(1L)).thenReturn(agent(1L, "助手", "ACTIVE", 8));
+
+        mockMvc.perform(post("/api/agents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"助手\",\"description\":\"" + "x".repeat(512) + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void create_invalidMaxSteps_returns400() throws Exception {
         mockMvc.perform(post("/api/agents")
                         .contentType(MediaType.APPLICATION_JSON)

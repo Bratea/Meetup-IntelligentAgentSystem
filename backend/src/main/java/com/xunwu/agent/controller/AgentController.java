@@ -99,10 +99,8 @@ public class AgentController {
         } else if (isCreate) {
             throw BizException.badRequest("智能体名称不能为空");
         }
-        // name 列是 VARCHAR(128)，超长会触发 DB 约束异常，提前拦成 400
-        if (agent.getName() != null && agent.getName().length() > 128) {
-            throw BizException.badRequest("智能体名称不能超过 128 个字符");
-        }
+        // 与表结构对齐，避免超长值触发 DB 约束异常（500）
+        assertFitsColumn(agent.getName(), 128, "智能体名称");
         if (request.getDescription() != null) {
             agent.setDescription(trimToNull(request.getDescription()));
         }
@@ -115,6 +113,9 @@ public class AgentController {
         if (request.getModelId() != null) {
             agent.setModelId(trimToNull(request.getModelId()));
         }
+        assertFitsColumn(agent.getDescription(), 512, "智能体描述");
+        assertFitsColumn(agent.getAvatar(), 255, "头像地址");
+        assertFitsColumn(agent.getModelId(), 64, "模型标识");
         // modelId 为空时由数据库默认值 qwen2.5:7b 兜底，不强制客户端必填
         // tool_ids 为 JSONB NOT NULL，空值统一落 '[]'
         if (request.getToolIds() != null) {
@@ -169,6 +170,13 @@ public class AgentController {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** 校验字符串字段不超过列宽，超长直接返回 400（否则会触发 DB 约束异常变成 500） */
+    private void assertFitsColumn(String value, int max, String label) {
+        if (value != null && value.length() > max) {
+            throw BizException.badRequest(label + "不能超过 " + max + " 个字符");
+        }
     }
 
     // ---------- 请求体 ----------

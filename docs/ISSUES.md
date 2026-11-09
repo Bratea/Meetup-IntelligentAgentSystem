@@ -509,3 +509,18 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 **复验**：后端 `mvn test` 118 通过 / 0 失败（新增 `ChatClientRegistryTest` 5 个）；
 前端 `npm run build` 通过；带 `LONGCAT_API_KEY` 启动后 `/api/models` 显示 LongCat 可用，
 普通对话 / RAG 问答 / 工具调用实测正常，未知模型返回明确错误事件。
+
+---
+
+## 第七轮：边界校验与工具健壮性（P18）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P18-1 | `ChatPage` 在 react-router 下会卸载，但只在「停止」时 abort；路由切走后 fetch 仍在后台跑，后端继续生成直到完成 | 补卸载清理 `abortRef.current?.abort()`，与 P16-1 的后端真中断配合 |
+| P18-2 | `AgentController` 只校验 `name` 长度，`description`(512) / `avatar`(255) / `modelId`(64) 超长仍会触发 DB 约束异常变 500 | 统一 `assertFitsColumn` 校验，超长返回 400 |
+| P18-3 | `CurrentTimeTool` 未捕获非法 pattern，`DateTimeFormatter.ofPattern` 抛 `IllegalArgumentException` 让工具调用失败 | 捕获后回退默认格式，并把回退后的 pattern 回填到返回里 |
+| P18-4 | `KnowledgeSearchTool` 把底层异常 message 直接回给模型，可能含 SQL / 内部地址并进入对话内容 | 仅 `BizException`（已脱敏）回传，其余统一兜底文案 |
+
+**复验**：后端 `mvn test` 126 通过 / 0 失败（新增 `CurrentTimeToolTest` 4 个、`AgentControllerTest` +4）；
+前端 `npm run build` 通过；实测非法 pattern 回退默认格式、知识库工具返回结果、
+超长 description / modelId 均返回 400。

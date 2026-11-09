@@ -36,7 +36,15 @@ public class CurrentTimeTool {
                 // 使用默认格式
             }
         }
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern(pattern));
+        String now;
+        try {
+            now = LocalDateTime.now().format(DateTimeFormatter.ofPattern(pattern));
+        } catch (IllegalArgumentException e) {
+            // 模型给的 pattern 可能非法（如包含未转义的字母），回退默认格式而不是让工具报错
+            log.warn("时间格式非法，回退默认格式: pattern={}", pattern);
+            pattern = "yyyy-MM-dd HH:mm:ss";
+            now = LocalDateTime.now().format(DateTimeFormatter.ofPattern(pattern));
+        }
         Map<String, String> result = new HashMap<>();
         result.put("datetime", now);
         result.put("pattern", pattern);

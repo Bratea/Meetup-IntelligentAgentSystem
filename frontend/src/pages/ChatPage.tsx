@@ -132,6 +132,10 @@ export default function ChatPage() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [pickerOpen])
 
+  // 组件卸载时中断在途流：路由切走后 fetch 仍在后台跑，后端会继续生成直到完成，白烧算力。
+  // 配合后端 FluxSink.onCancel（P16-1）才能真正停下模型调用。
+  useEffect(() => () => abortRef.current?.abort(), [])
+
   // 页面头部与输入区入场
   useGSAP(
     () => {

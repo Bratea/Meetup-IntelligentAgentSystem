@@ -288,3 +288,27 @@
   LongCat 普通对话、RAG 问答（正确引用知识库内容）、工具调用均正常；
   未知模型返回 `未注册的模型: nope，可用模型: [...]` 错误事件；
   空模型回退默认模型正常。
+
+---
+
+## P18：边界校验与工具健壮性
+
+**后端**
+
+- `ChatPage`：补卸载时中止在途流的清理。原先只有「停止」按钮会 abort，
+  路由切走后 fetch 仍在后台跑，后端继续生成直到完成（白烧算力）。
+  与 P16-1 的 `FluxSink.onCancel` 配合才能真正停下模型调用。
+- `AgentController`：`description` / `avatar` / `modelId` 补齐列宽校验
+  （512 / 255 / 64），与已有的 `name`(128) 统一走 `assertFitsColumn`，超长返回 400。
+- `CurrentTimeTool`：pattern 完全由模型生成，非法值会让
+  `DateTimeFormatter.ofPattern` 抛异常并导致工具调用失败；现在捕获后回退默认格式。
+- `KnowledgeSearchTool`：底层异常 message 不再直接回给模型，
+  只有 `BizException`（已脱敏，会提示该拉取哪个模型）才回传，其余统一兜底。
+
+**验证**
+
+- 后端 `mvn test`：**126 通过 / 0 失败 / 0 错误**（新增 `CurrentTimeToolTest` 4 个、
+  `AgentControllerTest` +4）。
+- 前端 `npm run build`：通过。
+- 实测：非法 pattern（`yyyy-To`）回退默认格式且模型正确理解；
+  知识库检索工具返回命中结果；超长 `description` / `modelId` 均返回 400。
