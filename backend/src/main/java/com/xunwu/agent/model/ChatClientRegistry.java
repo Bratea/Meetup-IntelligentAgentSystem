@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * 多模型管理组件
  *
  * <p>按模型标识动态获取对应的 {@link ChatClient}，将模型配置与 Agent 执行逻辑解耦。
- * 统一管理 DeepSeek / 智谱 / Ollama 的调用入口。</p>
+ * 统一管理 DeepSeek / 智谱 / Ollama / LongCat 的调用入口。</p>
  *
  * @author xunwu
  */
