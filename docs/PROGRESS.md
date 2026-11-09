@@ -312,3 +312,36 @@
 - 前端 `npm run build`：通过。
 - 实测：非法 pattern（`yyyy-To`）回退默认格式且模型正确理解；
   知识库检索工具返回命中结果；超长 `description` / `modelId` 均返回 400。
+
+---
+
+## P19：固定工具重复注册
+
+**问题**
+
+`knowledge_search` 是固定工具（所有智能体自动生效），但前端把它当成普通可选项渲染。
+一旦勾选，`toolIds` 里就会同时出现它，`buildContext` 先按 `toolIds` 取一遍、
+再 `addAll(getFixedTools())` 追加一遍，同名工具注册两次。
+
+Spring AI 的 `ToolCallingChatOptions.validateToolCallbacks` 对同名工具直接抛
+`IllegalStateException`，实测整个对话只推出一个 `thinking` 事件就失败：
+
+```
+java.lang.IllegalStateException: Multiple tools with the same name (knowledge_search)
+    found in ToolCallingChatOptions
+```
+
+**修复**
+
+- `ToolRegistry`：新增 `getMergedTools(names)` / `getMergedToolNames(names)`，
+  按工具名去重合并可选工具与固定工具，从根上保证同名只出现一次。
+- `ChatService.buildContext`：改用上述两个方法，删掉手工 `addAll` 追加。
+- `AgentsPage`：FIXED 工具渲染为禁用且常开的勾选框（附「自动启用」提示），
+  并且不再提交到 `toolIds`；maxSteps 输入上限由 20 对齐到后端的 50。
+
+**验证**
+
+- 后端 `mvn test`：**131 通过 / 0 失败**（`ToolRegistryTest` +5 个去重用例）。
+- 前端 `npm run build`：通过。
+- 实测：构造 `toolIds=["knowledge_search","current_time"]` 的智能体，
+  对话正常完成并返回 `done`（修复前只推 thinking 就报错）。

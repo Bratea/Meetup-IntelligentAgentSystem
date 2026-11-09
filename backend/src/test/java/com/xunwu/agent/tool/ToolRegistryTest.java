@@ -79,4 +79,40 @@ class ToolRegistryTest {
         assertTrue(registry.getTools(List.of()).isEmpty());
         assertDoesNotThrow(() -> registry.getTools(null).addAll(new ArrayList<>()));
     }
+
+    @Test
+    void getMergedTools_appendsFixedAndDeduplicates() {
+        // 显式列出固定工具时只保留一份，否则 Spring AI 会抛同名工具异常
+        List<ToolCallback> tools = registry.getMergedTools(
+                List.of("tool_a", "fixed_tool"));
+        assertEquals(List.of("tool_a", "fixed_tool"),
+                tools.stream().map(t -> t.getToolDefinition().name()).toList());
+    }
+
+    @Test
+    void getMergedTools_filtersUnregisteredAndDisabled() {
+        List<ToolCallback> tools = registry.getMergedTools(
+                List.of("tool_a", "tool_disabled", "not_exist"));
+        assertEquals(List.of("tool_a", "fixed_tool"),
+                tools.stream().map(t -> t.getToolDefinition().name()).toList());
+    }
+
+    @Test
+    void getMergedToolNames_deduplicates() {
+        List<String> names = registry.getMergedToolNames(
+                List.of("tool_a", "tool_b", "fixed_tool", "not_exist"));
+        assertEquals(List.of("tool_a", "tool_b", "fixed_tool"), names);
+    }
+
+    @Test
+    void getMergedTools_emptyNames_stillReturnsFixed() {
+        List<ToolCallback> tools = registry.getMergedTools(List.of());
+        assertEquals(1, tools.size());
+        assertEquals("fixed_tool", tools.get(0).getToolDefinition().name());
+    }
+
+    @Test
+    void getMergedToolNames_nullNames_stillReturnsFixed() {
+        assertEquals(List.of("fixed_tool"), registry.getMergedToolNames(null));
+    }
 }

@@ -209,15 +209,14 @@ public class ChatService {
         }
 
         List<String> configuredTools = parseToolIds(agent.getToolIds());
-        // 可选工具 + 固定工具，统一用可变列表承载
-        List<ToolCallback> tools = new ArrayList<>(toolRegistry.getTools(configuredTools));
-        tools.addAll(toolRegistry.getFixedTools());
+        // 可选工具 + 固定工具，同名去重（固定工具始终对所有智能体生效）。
+        // 同名重复会让 Spring AI 的 validateToolCallbacks 直接抛 IllegalStateException。
+        List<ToolCallback> tools = toolRegistry.getMergedTools(configuredTools);
 
         // toolNames 必须是"真正注册且启用"的名字。
         // Spring AI 的 DefaultToolCallingManager.resolveToolDefinitions 会对 toolNames 中
         // 无法解析的名字抛 IllegalStateException，未过滤会导致整个对话 500。
-        List<String> toolNames = new ArrayList<>(toolRegistry.resolveToolNames(configuredTools));
-        toolNames.addAll(toolRegistry.getFixedToolNames());
+        List<String> toolNames = toolRegistry.getMergedToolNames(configuredTools);
 
         Integer maxSteps = request.getMaxSteps() != null
                 ? request.getMaxSteps()

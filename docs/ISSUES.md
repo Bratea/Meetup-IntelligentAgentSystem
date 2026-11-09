@@ -524,3 +524,16 @@ Spring AI / WebClient 对连不上 Ollama 的包装层次不固定：实测连�
 **复验**：后端 `mvn test` 126 通过 / 0 失败（新增 `CurrentTimeToolTest` 4 个、`AgentControllerTest` +4）；
 前端 `npm run build` 通过；实测非法 pattern 回退默认格式、知识库工具返回结果、
 超长 description / modelId 均返回 400。
+
+---
+
+## 第八轮：固定工具重复注册（P19）
+
+| 编号 | 问题 | 修复 |
+| --- | --- | --- |
+| P19-1 | 固定工具 `knowledge_search` 出现在智能体表单的「可选工具」列表里，勾选后 `toolIds` 与固定工具重复注册，Spring AI 抛 `IllegalStateException: Multiple tools with the same name`，**整个对话直接失败** | `ToolRegistry` 新增 `getMergedTools` / `getMergedToolNames`（同名去重），`ChatService.buildContext` 改用；前端 FIXED 工具改为禁用的常开项且不提交到 `toolIds` |
+| P19-2 | `AgentsPage` 的 maxSteps 输入上限写 20，后端允许 50，两端不一致 | 对齐为 50 |
+
+**复验**：后端 `mvn test` 131 通过 / 0 失败（`ToolRegistryTest` +5）；
+构造 `toolIds=["knowledge_search","current_time"]` 的智能体实测对话正常完成（修复前只推一个 thinking 事件就报错）；
+前端 `npm run build` 通过。

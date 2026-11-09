@@ -75,7 +75,11 @@ export default function AgentsPage() {
         description: form.description,
         systemPrompt: form.systemPrompt,
         modelId: form.modelId || models[0]?.id || '',
-        toolIds: form.toolIds,
+        // 固定工具由后端自动追加，不进 toolIds ——
+        // 重复注册同名工具会让 Spring AI 的 validateToolCallbacks 抛 IllegalStateException
+        toolIds: form.toolIds.filter(
+          (name) => tools.find((t) => t.name === name)?.type !== 'FIXED',
+        ),
         maxSteps: form.maxSteps,
         status: form.status,
       }
@@ -196,7 +200,7 @@ export default function AgentsPage() {
                   className="input"
                   type="number"
                   min={1}
-                  max={20}
+                  max={50}
                   value={form.maxSteps}
                   onChange={(e) =>
                     setForm({ ...form, maxSteps: Number(e.target.value) })
@@ -238,22 +242,28 @@ export default function AgentsPage() {
             <div className="field">
               <label className="field__label">可选工具</label>
               <div className="agents__tools">
-                {tools.map((tool) => (
-                  <label
-                    key={tool.name}
-                    className={`agents__tool${
-                      selectedTools.includes(tool.name) ? ' agents__tool--active' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTools.includes(tool.name)}
-                      onChange={() => toggleTool(tool.name)}
-                    />
-                    <span>{tool.name}</span>
-                    <span className="badge badge--primary">{tool.type}</span>
-                  </label>
-                ))}
+                {tools.map((tool) => {
+                  // 固定工具对所有智能体生效，不给勾选（禁用了也不影响后端追加）
+                  const isFixed = tool.type === 'FIXED'
+                  const checked = isFixed || selectedTools.includes(tool.name)
+                  return (
+                    <label
+                      key={tool.name}
+                      className={`agents__tool${checked ? ' agents__tool--active' : ''}`}
+                      title={isFixed ? '固定工具，所有智能体自动启用，无需勾选' : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isFixed}
+                        onChange={() => toggleTool(tool.name)}
+                      />
+                      <span>{tool.name}</span>
+                      <span className="badge badge--primary">{tool.type}</span>
+                      {isFixed && <span className="card__meta">自动启用</span>}
+                    </label>
+                  )
+                })}
                 {tools.length === 0 && (
                   <span className="card__meta">暂无可用工具</span>
                 )}

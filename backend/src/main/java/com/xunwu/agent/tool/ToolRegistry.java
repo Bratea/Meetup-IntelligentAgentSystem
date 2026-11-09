@@ -6,6 +6,8 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
 public class ToolRegistry {
 
     /** 所有已注册工具，key = 工具名 */
-    private final Map<String, RegisteredTool> tools = new java.util.LinkedHashMap<>();
+    private final Map<String, RegisteredTool> tools = new LinkedHashMap<>();
 
     /**
      * 注册工具
@@ -93,6 +95,35 @@ public class ToolRegistry {
                 .filter(n -> tools.get(n).enabled())
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 按名称列表获取工具，并追加固定工具（同名去重）。
+     *
+     * <p>固定工具对所有智能体生效。若调用方已在 {@code names} 里显式列出某个固定工具，
+     * 只保留一份 —— Spring AI 的 {@code ToolCallingChatOptions.validateToolCallbacks}
+     * 对同名工具会直接抛 {@code IllegalStateException}，整个对话就彻底失败。</p>
+     */
+    public List<ToolCallback> getMergedTools(List<String> names) {
+        Map<String, ToolCallback> merged = new LinkedHashMap<>();
+        for (ToolCallback tool : getTools(names)) {
+            merged.put(tool.getToolDefinition().name(), tool);
+        }
+        for (ToolCallback tool : getFixedTools()) {
+            merged.putIfAbsent(tool.getToolDefinition().name(), tool);
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    /**
+     * {@link #getMergedTools(List)} 对应的工具名列表（同样同名去重）。
+     */
+    public List<String> getMergedToolNames(List<String> names) {
+        List<String> mergedNames = new ArrayList<>();
+        for (ToolCallback tool : getMergedTools(names)) {
+            mergedNames.add(tool.getToolDefinition().name());
+        }
+        return mergedNames;
     }
 
     /**
